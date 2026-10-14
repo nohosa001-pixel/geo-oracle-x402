@@ -1,0 +1,56 @@
+{
+  "project_name": "A.GRID Physical AI & Autonomous Logistics Oracle Suite",
+  "project_id": "geo-oracle-x402",
+  "tag": "AGRID-GEO",
+  "category": "DePIN / Physical AI / Autonomous Robotics & Logistics Escrow",
+  "website": "https://agrid.network",
+  "github": "https://github.com/autonomous-oracles/global-geo-oracle-x402",
+  "documentation": "https://agrid.network/docs/physical-ai-oracle",
+  "twitter": "https://x.com/agrid_network",
+  "description": "Enterprise-grade Physical AI & Autonomous Logistics Escrow Oracle Suite on Solana Mainnet-Beta and EVM Multi-Chain. Delivers WGS84 3D terrain physics, boundary layer micro-weather turbulence analytics, and automated 3-way SPL USDC escrow settlement for autonomous rovers, drones, and heavy cargo agents.",
+  "solana_network": {
+    "cluster": "mainnet-beta",
+    "treasury_wallet": "411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp",
+    "settlement_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "settlement_symbol": "USDC",
+    "programs": [
+      {
+        "name": "UniversalEscrowCore",
+        "program_id": "AGR3W3R9pKxnuZGYrpaggfkbMKVrjoniLaGvi1voBFSC",
+        "solscan_url": "https://solscan.io/account/AGR3W3R9pKxnuZGYrpaggfkbMKVrjoniLaGvi1voBFSC",
+        "idl_path": "contracts/verification/solana/autonomous_logistics_escrow.idl.json",
+        "description": "Sub-second 3-way direct split escrow settlement with Ed25519 PoI/PoD oracle attestation for autonomous rovers and drones"
+      },
+      {
+        "name": "AgentPaymentVault",
+        "program_id": "7oZ16YaazQzN6z5uA1nAZWD9oGUDXyvHwXGJLFYyWi3y",
+        "solscan_url": "https://solscan.io/account/7oZ16YaazQzN6z5uA1nAZWD9oGUDXyvHwXGJLFYyWi3y",
+        "description": "Autonomous AI Agent pre-funded micro-payment vault supporting zero-latency query execution under HTTP x402 monetization"
+      }
+    ]
+  },
+  "evm_verified_contracts": {
+    "deployer_address": "0xA185B43fDD19619f99952AAed6eabf1029bF36a1",
+    "polygon_137": {
+      "AutonomousLogisticsEscrow": "0x0b6f3aeb26aCb6a6e451406503131Aaced83a3ad",
+      "ParametricInsurancePool": "0x1a56D8b8f13234d83e6F3b682ff51eacdBA58B89",
+      "MachineCreditScorer": "0xd816a7c801229f2264259F414B28E92645Be9596",
+      "OracleStakingManager": "0xb9a0d0cA18bf728c23A84f8DA60541963836EEb5",
+      "x402Settlement": "0x54786360Db4582AEC2435E216479FD4ff093CB80"
+    },
+    "base_8453": {
+      "AutonomousLogisticsEscrow": "0xaA03fB8eD6c015858d35616F45761BcB9dE39cfA",
+      "ParametricInsurancePool": "0x0b6f3aeb26aCb6a6e451406503131Aaced83a3ad",
+      "MachineCreditScorer": "0x1a56D8b8f13234d83e6F3b682ff51eacdBA58B89",
+      "OracleStakingManager": "0xd816a7c801229f2264259F414B28E92645Be9596",
+      "x402Settlement": "0xb9a0d0cA18bf728c23A84f8DA60541963836EEb5"
+    },
+    "arbitrum_42161": {
+      "AutonomousLogisticsEscrow": "0xaA03fB8eD6c015858d35616F45761BcB9dE39cfA",
+      "ParametricInsurancePool": "0x0b6f3aeb26aCb6a6e451406503131Aaced83a3ad",
+      "MachineCreditScorer": "0x1a56D8b8f13234d83e6F3b682ff51eacdBA58B89",
+      "OracleStakingManager": "0xd816a7c801229f2264259F414B28E92645Be9596",
+      "x402Settlement": "0xb9a0d0cA18bf728c23A84f8DA60541963836EEb5"
+    }
+  }
+}

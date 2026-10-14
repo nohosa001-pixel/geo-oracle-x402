@@ -1,0 +1,68 @@
+{
+  "last_sync_timestamp": 1791970341,
+  "sync_count": 35,
+  "weather": {
+    "model_version": "NOAA-GFS-v16.3-HYBRID",
+    "global_pressure_anomaly_hpa": 1.95,
+    "regional_wind_modifiers": {
+      "ASIA_EAST": {
+        "u_offset": -0.32,
+        "gust_factor": 1.08
+      },
+      "EUROPE_CENTRAL": {
+        "u_offset": 0.36,
+        "gust_factor": 1.08
+      },
+      "AMERICA_NORTH": {
+        "u_offset": 0.16,
+        "gust_factor": 1.02
+      }
+    },
+    "last_updated": 1791968418
+  },
+  "geofence_notams": {
+    "active_temporary_restrictions": [
+      {
+        "notam_id": "NOTAM-2026-KR-042",
+        "name": "Songdo Coastal Smart Drone Corridor (Low-Altitude Cleared)",
+        "lat": 37.3827,
+        "lon": 126.6573,
+        "radius_km": 4.5,
+        "min_alt_m": 0,
+        "max_alt_m": 120,
+        "restriction_type": "CORRIDOR_PREFERENTIAL_CLEARANCE",
+        "valid_until": 1792227617
+      },
+      {
+        "notam_id": "NOTAM-2026-EU-118",
+        "name": "Geneva Airport Eastern Drone Buffer Zone",
+        "lat": 46.237,
+        "lon": 6.1092,
+        "radius_km": 9.3,
+        "min_alt_m": 0,
+        "max_alt_m": 3000,
+        "restriction_type": "TEMPORARY_STRICT_AIRPORT_NFZ",
+        "valid_until": 1792573217
+      },
+      {
+        "notam_id": "NOTAM-2026-US-882",
+        "name": "JFK Port Maritime Autonomous Cargo Transit Lane",
+        "lat": 40.6413,
+        "lon": -73.7781,
+        "radius_km": 12.0,
+        "min_alt_m": 0,
+        "max_alt_m": 150,
+        "restriction_type": "RESTRICTED_PORT_ACCESS",
+        "valid_until": 1792400417
+      }
+    ],
+    "source_authority": "ICAO-FAA-MOLIT-U_SPACE",
+    "last_updated": 1791968417
+  },
+  "rf_satcom": {
+    "starlink_active_satellites": 6462,
+    "gnss_constellation_health": "NOMINAL_100_PCT_HEALTH",
+    "5g_tower_database_version": "2026.Q3-RELEASE",
+    "last_updated": 1791968420
+  }
+}

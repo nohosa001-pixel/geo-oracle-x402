@@ -1,0 +1,421 @@
+{
+  "version": "1.0.0",
+  "name": "autonomous_logistics_escrow",
+  "address": "AGR3W3R9pKxnuZGYrpaggfkbMKVrjoniLaGvi1voBFSC",
+  "metadata": {
+    "title": "A.GRID Autonomous Physical AI Logistics Escrow",
+    "description": "Universal Logistics, cold-chain, and high-value freight escrow on Solana Mainnet-Beta",
+    "license": "MIT",
+    "repository": "https://github.com/autonomous-oracles/global-geo-oracle-x402"
+  },
+  "instructions": [
+    {
+      "name": "initializeMission",
+      "accounts": [
+        {
+          "name": "mission",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "consignor",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "merchant",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "carrierAgent",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "carrierOwner",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "usdcMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "consignorTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "escrowVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "missionId",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "category",
+          "type": "u8"
+        },
+        {
+          "name": "goodsPriceUsdc",
+          "type": "u64"
+        },
+        {
+          "name": "deliveryFeeUsdc",
+          "type": "u64"
+        },
+        {
+          "name": "oracleFeeUsdc",
+          "type": "u64"
+        },
+        {
+          "name": "maxAllowedGForce",
+          "type": "u64"
+        },
+        {
+          "name": "minTempCelsius",
+          "type": "i32"
+        },
+        {
+          "name": "maxTempCelsius",
+          "type": "i32"
+        },
+        {
+          "name": "deadline",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "verifyPoiDispatch",
+      "accounts": [
+        {
+          "name": "mission",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "oracleAuthority",
+          "isMut": false,
+          "isSigner": true
+        }
+      ],
+      "args": [
+        {
+          "name": "riskScorePpm",
+          "type": "u32"
+        },
+        {
+          "name": "validUntil",
+          "type": "i64"
+        },
+        {
+          "name": "oracleSignature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "verifyPodAndDisburse",
+      "accounts": [
+        {
+          "name": "mission",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "escrowVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "merchantTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "carrierOwnerTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "oracleVaultTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "destLatE7",
+          "type": "i64"
+        },
+        {
+          "name": "destLonE7",
+          "type": "i64"
+        },
+        {
+          "name": "completedAt",
+          "type": "i64"
+        },
+        {
+          "name": "oracleSignature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "LogisticsMission",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "missionId",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "category",
+            "type": "u8"
+          },
+          {
+            "name": "consignor",
+            "type": "publicKey"
+          },
+          {
+            "name": "merchant",
+            "type": "publicKey"
+          },
+          {
+            "name": "carrierAgent",
+            "type": "publicKey"
+          },
+          {
+            "name": "carrierOwner",
+            "type": "publicKey"
+          },
+          {
+            "name": "goodsPriceUsdc",
+            "type": "u64"
+          },
+          {
+            "name": "deliveryFeeUsdc",
+            "type": "u64"
+          },
+          {
+            "name": "oracleFeeUsdc",
+            "type": "u64"
+          },
+          {
+            "name": "maxAllowedGForce",
+            "type": "u64"
+          },
+          {
+            "name": "minTempCelsius",
+            "type": "i32"
+          },
+          {
+            "name": "maxTempCelsius",
+            "type": "i32"
+          },
+          {
+            "name": "deadline",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": "MissionStatus"
+            }
+          },
+          {
+            "name": "poiRiskPpm",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "MissionStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Created"
+          },
+          {
+            "name": "Funded"
+          },
+          {
+            "name": "Dispatched"
+          },
+          {
+            "name": "Delivered"
+          },
+          {
+            "name": "Refunded"
+          },
+          {
+            "name": "Cancelled"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "MissionCreatedEvent",
+      "fields": [
+        {
+          "name": "missionId",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          },
+          "index": false
+        },
+        {
+          "name": "consignor",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "carrierAgent",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "totalEscrowUsdc",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "MissionDispatchedEvent",
+      "fields": [
+        {
+          "name": "missionId",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          },
+          "index": false
+        },
+        {
+          "name": "riskScorePpm",
+          "type": "u32",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "MissionDeliveredEvent",
+      "fields": [
+        {
+          "name": "missionId",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          },
+          "index": false
+        },
+        {
+          "name": "merchantPaid",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "carrierOwnerPaid",
+          "type": "u64",
+          "index": false
+        },
+        {
+          "name": "oracleFeePaid",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "MathOverflow",
+      "msg": "Math calculation resulted in an overflow"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidStatus",
+      "msg": "Invalid mission status transition"
+    },
+    {
+      "code": 6002,
+      "name": "ProofExpired",
+      "msg": "Proof of Insurability validity window has expired"
+    },
+    {
+      "code": 6003,
+      "name": "MissionDeadlinePassed",
+      "msg": "Mission deadline has expired"
+    }
+  ]
+}

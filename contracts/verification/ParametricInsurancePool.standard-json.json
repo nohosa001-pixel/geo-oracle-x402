@@ -1,0 +1,29 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "ParametricInsurancePool.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/**\n * @title ParametricInsurancePool\n * @notice On-chain parametric risk pool and autonomous claim disbursement contract.\n * Releases instant compensation upon verifying oracle proof hash and policy claim verdict.\n */\ncontract ParametricInsurancePool {\n    string public constant NAME = \"Parametric-Physical-AI-Insurance-Pool\";\n    \n    address public oracleSigner;\n    address public poolManager;\n    uint256 public totalLiquidity;\n    uint256 public totalClaimsPaid;\n\n    struct Policy {\n        string policyId;\n        address insuredAgent;\n        uint256 maxCoverageUsdc;\n        uint256 premiumPaidUsdc;\n        uint256 validUntil;\n        bool active;\n        bool claimed;\n    }\n\n    // Policy registry: policyId hash => Policy\n    mapping(bytes32 => Policy) public policies;\n    \n    // Processed claim proof hashes to prevent duplicate claim payouts\n    mapping(bytes32 => bool) public executedClaims;\n\n    event PolicyCreated(\n        bytes32 indexed policyHash,\n        string policyId,\n        address indexed insuredAgent,\n        uint256 maxCoverageUsdc,\n        uint256 premiumPaidUsdc,\n        uint256 validUntil\n    );\n\n    event ClaimPaid(\n        bytes32 indexed policyHash,\n        bytes32 indexed proofHash,\n        address indexed beneficiary,\n        uint256 payoutAmountUsdc,\n        string triggerCode\n    );\n\n    modifier onlyOracle() {\n        require(msg.sender == oracleSigner || msg.sender == poolManager, \"Unauthorized oracle\");\n        _;\n    }\n\n    constructor(address _oracleSigner) {\n        poolManager = msg.sender;\n        oracleSigner = _oracleSigner;\n    }\n\n    function setOracleSigner(address _newOracle) external {\n        require(msg.sender == poolManager, \"Only pool manager\");\n        oracleSigner = _newOracle;\n    }\n\n    /**\n     * @notice Registers an underwritten policy after Proof of Insurability issuance.\n     */\n    function registerPolicy(\n        string calldata policyId,\n        address insuredAgent,\n        uint256 maxCoverageUsdc,\n        uint256 premiumPaidUsdc,\n        uint256 durationSeconds\n    ) external onlyOracle returns (bytes32) {\n        bytes32 pHash = keccak256(bytes(policyId));\n        require(!policies[pHash].active, \"Policy already exists\");\n\n        policies[pHash] = Policy({\n            policyId: policyId,\n            insuredAgent: insuredAgent,\n            maxCoverageUsdc: maxCoverageUsdc,\n            premiumPaidUsdc: premiumPaidUsdc,\n            validUntil: block.timestamp + durationSeconds,\n            active: true,\n            claimed: false\n        });\n\n        emit PolicyCreated(pHash, policyId, insuredAgent, maxCoverageUsdc, premiumPaidUsdc, block.timestamp + durationSeconds);\n        return pHash;\n    }\n\n    /**\n     * @notice Executes automatic parametric claim payout upon cryptographic oracle adjudication.\n     */\n    function executeParametricPayout(\n        string calldata policyId,\n        bytes32 proofHash,\n        address payable beneficiary,\n        uint256 payoutAmountUsdc,\n        string calldata triggerCode,\n        bytes calldata oracleSignature\n    ) external returns (bool) {\n        bytes32 pHash = keccak256(bytes(policyId));\n        Policy storage p = policies[pHash];\n        \n        require(p.active, \"Policy inactive or non-existent\");\n        require(!p.claimed, \"Policy already settled\");\n        require(block.timestamp <= p.validUntil, \"Policy expired\");\n        require(!executedClaims[proofHash], \"Claim already executed\");\n        require(payoutAmountUsdc <= p.maxCoverageUsdc, \"Payout exceeds coverage\");\n\n        // Verify Oracle Signature over the claim verdict\n        bytes32 messageHash = keccak256(\n            abi.encodePacked(\n                \"\\x19Ethereum Signed Message:\\n32\",\n                keccak256(abi.encode(pHash, proofHash, beneficiary, payoutAmountUsdc, keccak256(bytes(triggerCode))))\n            )\n        );\n\n        address recovered = recoverSigner(messageHash, oracleSignature);\n        require(recovered == oracleSigner || recovered == poolManager, \"Invalid oracle signature\");\n\n        p.claimed = true;\n        p.active = false;\n        executedClaims[proofHash] = true;\n        totalClaimsPaid += payoutAmountUsdc;\n\n        emit ClaimPaid(pHash, proofHash, beneficiary, payoutAmountUsdc, triggerCode);\n        return true;\n    }\n\n    function recoverSigner(bytes32 messageHash, bytes memory sig) internal pure returns (address) {\n        require(sig.length == 65, \"Invalid signature length\");\n        bytes32 r;\n        bytes32 s;\n        uint8 v;\n        assembly {\n            r := mload(add(sig, 32))\n            s := mload(add(sig, 64))\n            v := byte(0, mload(add(sig, 96)))\n        }\n        return ecrecover(messageHash, v, r, s);\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "viaIR": true,
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "A.GRID Agent Card Manifest Schema",
+  "type": "object",
+  "description": "Schema definition for A.GRID Physical AI & Autonomous Logistics Agent Cards"
+}

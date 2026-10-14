@@ -1,0 +1,107 @@
+{
+  "mcp_version": "1.0",
+  "server_name": "autonomous-physical-ai-oracle-suite",
+  "description": "FastMCP Server delivering 6 deterministic physical AI oracles (Terrain, Weather, Geofence, RF SatCom, Energy Routing, Risk Underwriting & Insurance).",
+  "tools": [
+    {
+      "name": "analyze_geo_terrain_physics",
+      "description": "Analyze geographic coordinates to get WGS84 elevation, slope, aspect, solar radiation, and trafficability physics.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "latitude": {"type": "number", "description": "WGS84 Latitude"},
+          "longitude": {"type": "number", "description": "WGS84 Longitude"},
+          "sampling_radius_meters": {"type": "number", "default": 30.0}
+        },
+        "required": ["latitude", "longitude"]
+      }
+    },
+    {
+      "name": "analyze_micro_weather_turbulence",
+      "description": "Calculate 3D wind velocity vectors, boundary layer wind shear, EDR turbulence, and drone flight stability.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "latitude": {"type": "number"},
+          "longitude": {"type": "number"},
+          "altitude_agl_meters": {"type": "number", "default": 50.0},
+          "heading_degrees": {"type": "number", "default": 0.0}
+        },
+        "required": ["latitude", "longitude"]
+      }
+    },
+    {
+      "name": "check_airspace_geofence_regulation",
+      "description": "Check Class A-G airspace classifications, airport No-Fly Zones (NFZ), and UTM compliance status.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "latitude": {"type": "number"},
+          "longitude": {"type": "number"},
+          "altitude_agl_meters": {"type": "number", "default": 50.0}
+        },
+        "required": ["latitude", "longitude"]
+      }
+    },
+    {
+      "name": "analyze_rf_coverage_satcom",
+      "description": "Compute terrestrial 5G/LTE path loss, Starlink LEO satellite clearance angle, and communication link margins.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "latitude": {"type": "number"},
+          "longitude": {"type": "number"},
+          "altitude_agl_meters": {"type": "number", "default": 50.0}
+        },
+        "required": ["latitude", "longitude"]
+      }
+    },
+    {
+      "name": "plan_energy_optimal_trajectory",
+      "description": "Compute 3D energy-optimal waypoint path minimizing battery Watt-hour consumption and gravitational potential work.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "origin_latitude": {"type": "number"},
+          "origin_longitude": {"type": "number"},
+          "destination_latitude": {"type": "number"},
+          "destination_longitude": {"type": "number"},
+          "cruise_altitude_agl_meters": {"type": "number", "default": 60.0},
+          "vehicle_mass_kg": {"type": "number", "default": 8.0}
+        },
+        "required": ["origin_latitude", "origin_longitude", "destination_latitude", "destination_longitude"]
+      }
+    },
+    {
+      "name": "underwrite_mission_risk_and_insurance",
+      "description": "Synthesizes multi-factor physical risk, calculates actuarial dynamic insurance premium, and issues Proof of Insurability (PoI) flight clearance.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "origin_latitude": {"type": "number"},
+          "origin_longitude": {"type": "number"},
+          "destination_latitude": {"type": "number"},
+          "destination_longitude": {"type": "number"},
+          "vehicle_hull_value_usdc": {"type": "number", "default": 3500.0},
+          "cargo_value_usdc": {"type": "number", "default": 1500.0}
+        },
+        "required": ["origin_latitude", "origin_longitude", "destination_latitude", "destination_longitude"]
+      }
+    },
+    {
+      "name": "verify_parametric_insurance_claim",
+      "description": "Adjudicates blackbox flight telemetry against policy trigger rules and authorizes instant onchain smart contract payouts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "policy_id": {"type": "string"},
+          "proof_of_insurability_hash": {"type": "string"},
+          "blackbox_wind_gust_recorded_mps": {"type": "number"},
+          "blackbox_c2_link_loss_seconds": {"type": "number"},
+          "actual_damage_loss_usdc": {"type": "number"}
+        },
+        "required": ["policy_id", "proof_of_insurability_hash", "actual_damage_loss_usdc"]
+      }
+    }
+  ]
+}

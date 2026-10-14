@@ -1,0 +1,29 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "OracleStakingManager.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\n/**\n * @title OracleStakingManager\n * @notice Staking and Slashing Collateral Manager for geo-oracle nodes in A.GRID.\n * Oracles stake collateral; if proven to provide corrupted terrain/weather data causing a crash,\n * collateral is slashed and disbursed directly to the affected agent or insurance vault.\n */\ninterface IERC20 {\n    function transfer(address recipient, uint256 amount) external returns (bool);\n    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);\n}\n\ncontract OracleStakingManager {\n    string public constant NAME = \"A.GRID-Oracle-Staking-Manager\";\n    address public immutable USDC_TOKEN;\n    address public owner;\n    address public arbitrationDao;\n\n    uint256 public constant MINIMUM_STAKE = 5000 * 1e6; // 5,000 USDC minimum stake per node\n\n    struct OracleNode {\n        address nodeAddress;\n        uint256 stakedAmountUsdc;\n        uint256 totalQueriesServed;\n        uint256 slashCount;\n        uint256 reputationScore; // Base 1,000\n        bool isActive;\n    }\n\n    mapping(address => OracleNode) public oracles;\n\n    event OracleStaked(address indexed node, uint256 amount);\n    event OracleSlashed(address indexed node, uint256 amountSlashed, address indexed victimRecipient, string reason);\n    event OracleUnstaked(address indexed node, uint256 amount);\n\n    modifier onlyArbitrator() {\n        require(msg.sender == arbitrationDao || msg.sender == owner, \"Only arbitrator authorized\");\n        _;\n    }\n\n    constructor(address _usdcToken, address _arbitrationDao) {\n        owner = msg.sender;\n        USDC_TOKEN = _usdcToken;\n        arbitrationDao = _arbitrationDao;\n    }\n\n    function stakeCollateral(uint256 amountUsdc) external {\n        require(amountUsdc > 0, \"Stake amount must be > 0\");\n        require(IERC20(USDC_TOKEN).transferFrom(msg.sender, address(this), amountUsdc), \"Transfer failed\");\n\n        OracleNode storage node = oracles[msg.sender];\n        node.nodeAddress = msg.sender;\n        node.stakedAmountUsdc += amountUsdc;\n        if (node.stakedAmountUsdc >= MINIMUM_STAKE) {\n            node.isActive = true;\n        }\n        if (node.reputationScore == 0) {\n            node.reputationScore = 1000;\n        }\n\n        emit OracleStaked(msg.sender, amountUsdc);\n    }\n\n    /**\n     * @notice Slashes an oracle node if verified that bad data caused an autonomous mission failure.\n     */\n    function slashOracle(\n        address nodeAddress,\n        uint256 slashAmountUsdc,\n        address victimRecipient,\n        string calldata reason\n    ) external onlyArbitrator {\n        OracleNode storage node = oracles[nodeAddress];\n        require(node.stakedAmountUsdc >= slashAmountUsdc, \"Slash exceeds stake\");\n\n        node.stakedAmountUsdc -= slashAmountUsdc;\n        node.slashCount += 1;\n        if (node.reputationScore >= 100) {\n            node.reputationScore -= 100;\n        } else {\n            node.reputationScore = 0;\n        }\n\n        if (node.stakedAmountUsdc < MINIMUM_STAKE) {\n            node.isActive = false;\n        }\n\n        require(IERC20(USDC_TOKEN).transfer(victimRecipient, slashAmountUsdc), \"Disbursement failed\");\n        emit OracleSlashed(nodeAddress, slashAmountUsdc, victimRecipient, reason);\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "viaIR": true,
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    }
+  }
+}

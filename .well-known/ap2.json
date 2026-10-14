@@ -1,0 +1,88 @@
+{
+  "$schema": "./schemas/ap2-manifest.json",
+  "name": "autonomous-physical-ai-oracle-suite",
+  "display_name": "Autonomous Physical AI & Insurance Oracle Suite",
+  "version": "2.2.0",
+  "description": "Production-grade micro-oracle suite delivering deterministic spatial terrain physics, micro-weather turbulence, airspace geofencing, 5G/SatCom coverage, 3D energy-optimal routing, and real-time Actuarial Risk Underwriting & Parametric Smart Contract Insurance for physical AI robotics.",
+  "author": "Autonomous Physical AI Network",
+  "license": "MIT",
+  "monetization": {
+    "protocol": "x402",
+    "network": "polygon",
+    "supported_networks": ["solana", "polygon", "base", "arbitrum"],
+    "solana": {
+      "cluster": "mainnet-beta",
+      "token_symbol": "USDC",
+      "token_address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "recipient_address": "411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp",
+      "universal_escrow_program": "AGR3W3R9pKxnuZGYrpaggfkbMKVrjoniLaGvi1voBFSC",
+      "agent_payment_vault_program": "7oZ16YaazQzN6z5uA1nAZWD9oGUDXyvHwXGJLFYyWi3y",
+      "signature_standard": "ed25519"
+    },
+    "polygon": {
+      "chain_id": 137,
+      "token_symbol": "USDC",
+      "token_address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      "recipient_address": "0xA185B43fDD19619f99952AAed6eabf1029bF36a1",
+      "signature_standard": "eip712"
+    }
+  },
+  "capabilities": [
+    {
+      "id": "terrain-physics-oracle",
+      "type": "data_oracle",
+      "endpoint": "/v1/terrain/analyze",
+      "method": "POST",
+      "price_usdc": "0.005",
+      "description": "Calculates WGS84 elevation, slope gradient, compass aspect, and robotic locomotion trafficability."
+    },
+    {
+      "id": "micro-weather-oracle",
+      "type": "physics_oracle",
+      "endpoint": "/v1/weather/analyze",
+      "method": "POST",
+      "price_usdc": "0.005",
+      "description": "Calculates 3D boundary layer wind vectors, wind shear, EDR turbulence, and VTOL flight stability."
+    },
+    {
+      "id": "airspace-geofence-oracle",
+      "type": "regulatory_oracle",
+      "endpoint": "/v1/geofence/check",
+      "method": "POST",
+      "price_usdc": "0.005",
+      "description": "Evaluates Class A-G airspace, airport No-Fly Zones (NFZ), and UTM/U-Space legal compliance."
+    },
+    {
+      "id": "rf-satcom-mesh-oracle",
+      "type": "telecom_oracle",
+      "endpoint": "/v1/rf/coverage",
+      "method": "POST",
+      "price_usdc": "0.005",
+      "description": "Computes 5G/LTE path loss, Starlink/GNSS sky clearance mask angles, and link reliability margins."
+    },
+    {
+      "id": "energy-optimal-routing-oracle",
+      "type": "kinematic_planner_oracle",
+      "endpoint": "/v1/routing/energy-optimal",
+      "method": "POST",
+      "price_usdc": "0.010",
+      "description": "Generates 3D waypoint trajectories minimizing Watt-hour energy expenditure and battery SoC loss."
+    },
+    {
+      "id": "risk-underwriting-insurance-oracle",
+      "type": "actuarial_insurance_oracle",
+      "endpoint": "/v1/insurance/underwrite",
+      "method": "POST",
+      "price_usdc": "0.025",
+      "description": "Synthesizes multi-factor physical risk, calculates dynamic micro-premiums, and issues EIP-712 Proof of Insurability clearance certificates."
+    },
+    {
+      "id": "parametric-claim-adjudication-oracle",
+      "type": "claim_settlement_oracle",
+      "endpoint": "/v1/insurance/claim-verify",
+      "method": "POST",
+      "price_usdc": "0.050",
+      "description": "Cross-verifies onboard blackbox flight data and authorizes instant onchain parametric insurance payout disbursements."
+    }
+  ]
+}

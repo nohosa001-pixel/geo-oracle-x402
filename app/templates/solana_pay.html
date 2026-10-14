@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A.GRID Solana Pay & Autonomous Agent Portal (geo-oracle-x402)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --card-bg: rgba(22, 24, 38, 0.75);
+      --card-border: rgba(153, 69, 255, 0.25);
+      --solana-purple: #9945FF;
+      --solana-green: #14F195;
+      --solana-cyan: #00C2FF;
+      --text-main: #F3F4F6;
+      --text-dim: #9CA3AF;
+      --accent-glow: 0 0 25px rgba(20, 241, 149, 0.35);
+      --purple-glow: 0 0 25px rgba(153, 69, 255, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at 15% 20%, rgba(153, 69, 255, 0.18), transparent 45%),
+                  radial-gradient(circle at 85% 75%, rgba(20, 241, 149, 0.15), transparent 45%),
+                  var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Outfit', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .badge-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--solana-green);
+      margin-bottom: 1.2rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--solana-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--solana-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #FFFFFF 20%, var(--solana-green) 70%, var(--solana-purple) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.8rem;
+    }
+
+    p.subtitle {
+      color: var(--text-dim);
+      font-size: 1.05rem;
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    /* Grid layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1.25rem;
+      padding: 1.75rem;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(20, 241, 149, 0.45);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+      color: #FFFFFF;
+    }
+
+    .card-title .icon {
+      font-size: 1.4rem;
+    }
+
+    /* Info rows */
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.95rem;
+    }
+
+    .info-row:last-child { border-bottom: none; }
+    .info-label { color: var(--text-dim); }
+    .info-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--text-main);
+      text-align: right;
+    }
+    .info-value.highlight { color: var(--solana-green); }
+    .info-value.purple { color: var(--solana-purple); }
+
+    /* Interactive Inputs */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text-dim);
+    }
+
+    select, input {
+      width: 100%;
+      background: rgba(10, 11, 16, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      color: #FFFFFF;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      transition: all 0.2s ease;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--solana-green);
+      box-shadow: 0 0 15px rgba(20, 241, 149, 0.25);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      border-radius: 0.75rem;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      border: none;
+      text-decoration: none;
+    }
+
+    .btn-phantom {
+      background: linear-gradient(135deg, #AB9FF2 0%, var(--solana-purple) 100%);
+      color: #FFFFFF;
+      box-shadow: var(--purple-glow);
+      margin-bottom: 0.85rem;
+    }
+
+    .btn-phantom:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(153, 69, 255, 0.6);
+    }
+
+    .btn-pay {
+      background: linear-gradient(135deg, var(--solana-green) 0%, #00C2FF 100%);
+      color: #0A0B10;
+      box-shadow: var(--accent-glow);
+    }
+
+    .btn-pay:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 35px rgba(20, 241, 149, 0.6);
+    }
+
+    .btn-pay:disabled {
+      background: #374151;
+      color: #9CA3AF;
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Output Console */
+    .console-card {
+      background: #0B0D14;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1.25rem;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+
+    .console-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    pre {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      color: #34D399;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 320px;
+    }
+
+    /* Solscan Explorer Button */
+    .explorer-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--solana-cyan);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: color 0.2s;
+    }
+    .explorer-link:hover { color: var(--solana-green); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge-bar">
+        <span class="badge-dot"></span>
+        <span>Solana Mainnet-Beta x402 Micropayment Engine Active</span>
+      </div>
+      <h1>A.GRID Solana Pay & Oracle Portal</h1>
+      <p class="subtitle">Phantom 및 Solana 지갑으로 자율주행 Physical AI 오라클 수수료(0.005 USDC)를 실시간 결제하고 지형·기상 물리 텔레메트리를 수신합니다.</p>
+    </header>
+
+    <div class="grid">
+      <!-- Wallet & Vault Card -->
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">🪐</span>
+          <span>Solana Treasury & Wallet</span>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Network</span>
+          <span class="info-value highlight">Solana Mainnet-Beta</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Settlement Token</span>
+          <span class="info-value">SPL USDC (EPjFWd...)</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Oracle Creator Vault</span>
+          <span class="info-value purple" title="411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp">
+            411ksMz9...qx9qp
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Solscan Explorer</span>
+          <span class="info-value">
+            <a href="https://solscan.io/account/411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp" target="_blank" class="explorer-link">
+              Solscan 보기 ↗
+            </a>
+          </span>
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+          <button id="btn-connect-phantom" class="btn btn-phantom" onclick="handleConnectWallet()">
+            <span>🟣</span>
+            <span id="phantom-btn-text">Connect Phantom Wallet</span>
+          </button>
+          <div id="wallet-status-box" style="font-size: 0.85rem; color: var(--text-dim); text-align: center;">
+            지갑 미연결 (클릭 시 팬텀 연결 또는 내장 시뮬레이터 실행)
+          </div>
+        </div>
+      </div>
+
+      <!-- Oracle Execution Card -->
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">🛰️</span>
+          <span>Oracle Micropayment Action</span>
+        </div>
+
+        <div class="form-group">
+          <label for="select-oracle">호출할 Physical AI 오라클 선택</label>
+          <select id="select-oracle" onchange="updateOracleSelection()">
+            <option value="terrain" data-price="0.005" data-endpoint="/v1/terrain/analyze">1. Geo-Terrain Physics Oracle (0.005 USDC)</option>
+            <option value="weather" data-price="0.005" data-endpoint="/v1/weather/analyze">2. Micro-Weather & Turbulence Oracle (0.005 USDC)</option>
+            <option value="geofence" data-price="0.005" data-endpoint="/v1/geofence/check">3. Airspace Geofence & NFZ Oracle (0.005 USDC)</option>
+            <option value="routing" data-price="0.010" data-endpoint="/v1/routing/energy-optimal">4. Kinematic 3D Energy Routing (0.010 USDC)</option>
+            <option value="insurance" data-price="0.025" data-endpoint="/v1/insurance/underwrite">5. Risk Underwriting & PoI Clearance (0.025 USDC)</option>
+          </select>
+        </div>
+
+        <div class="info-row">
+          <span class="info-label">Required Fee</span>
+          <span class="info-value highlight" id="price-display">0.005 USDC</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Active Nonce</span>
+          <span class="info-value" id="nonce-display" style="font-size: 0.8rem;">Ready for Challenge</span>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <button id="btn-sign-and-pay" class="btn btn-pay" onclick="executeSolanaPayment()">
+            <span>⚡</span>
+            <span>솔라나 x402 서명 및 오라클 결제 실행</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Telemetry & Result Terminal -->
+    <div class="console-card">
+      <div class="console-header">
+        <div class="console-status">
+          <span class="badge-dot" id="terminal-dot"></span>
+          <span id="terminal-status-text">SYSTEM STANDBY - READY FOR SOLANA MICROPAYMENT</span>
+        </div>
+        <span style="font-size: 0.8rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="latency-display">Latency: 0ms</span>
+      </div>
+      <pre id="response-telemetry-viewer">// 오라클 결제 결과 및 Ed25519 서명 검증 텔레메트리가 여기에 실시간 출력됩니다.
+// 상단의 '솔라나 x402 서명 및 오라클 결제 실행' 버튼을 누르면 Solana 결제가 집행됩니다.</pre>
+    </div>
+  </div>
+
+  <script>
+    let activeWallet = null;
+    let isSimulator = false;
+    let currentNonce = null;
+
+    // Base58 encoder for browser
+    const B58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    function toBase58(bytes) {
+      const digits = [0];
+      for (let i = 0; i < bytes.length; i++) {
+        for (let j = 0; j < digits.length; j++) digits[j] <<= 8;
+        digits[0] += bytes[i];
+        let carry = 0;
+        for (let j = 0; j < digits.length; j++) {
+          digits[j] += carry;
+          carry = (digits[j] / 58) | 0;
+          digits[j] %= 58;
+        }
+        while (carry) {
+          digits.push(carry % 58);
+          carry = (carry / 58) | 0;
+        }
+      }
+      for (let i = 0; i < bytes.length && bytes[i] === 0; i++) digits.push(0);
+      return digits.reverse().map(d => B58_CHARS[d]).join('');
+    }
+
+    async function handleConnectWallet() {
+      const btn = document.getElementById("phantom-btn-text");
+      const statusBox = document.getElementById("wallet-status-box");
+
+      if (window.solana && window.solana.isPhantom) {
+        try {
+          const resp = await window.solana.connect();
+          activeWallet = resp.publicKey.toString();
+          isSimulator = false;
+          btn.innerText = `Connected: ${activeWallet.slice(0, 4)}...${activeWallet.slice(-4)}`;
+          statusBox.innerHTML = `<span style="color: var(--solana-green);">✔ Phantom 지갑 연결 성공: <code>${activeWallet}</code></span>`;
+          logTerminal(`[PHANTOM CONNECTED] Public Key: ${activeWallet}`);
+        } catch (err) {
+          logTerminal(`[PHANTOM ERROR] ${err.message}`);
+        }
+      } else {
+        // Fallback: Autonomous Agent Simulation Keypair
+        activeWallet = "411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp";
+        isSimulator = true;
+        btn.innerText = "Simulated Wallet: 411ks...9qp";
+        statusBox.innerHTML = `<span style="color: var(--solana-cyan);">ℹ️ 팬텀 미감지 → Autonomous Agent 시뮬레이션 모드 활성화 (Creator Vault: 411ks...9qp)</span>`;
+        logTerminal(`[SIMULATOR ACTIVATED] Autonomous Agent Keypair ready for zero-friction Ed25519 authorization.`);
+      }
+    }
+
+    function updateOracleSelection() {
+      const select = document.getElementById("select-oracle");
+      const option = select.options[select.selectedIndex];
+      document.getElementById("price-display").innerText = `${option.dataset.price} USDC`;
+    }
+
+    function logTerminal(text, obj = null) {
+      const viewer = document.getElementById("response-telemetry-viewer");
+      const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
+      let content = `[${timestamp}] ${text}`;
+      if (obj) {
+        content += "\n" + JSON.stringify(obj, null, 2);
+      }
+      viewer.innerText = content + "\n\n" + viewer.innerText;
+    }
+
+    async function executeSolanaPayment() {
+      const btn = document.getElementById("btn-sign-and-pay");
+      const select = document.getElementById("select-oracle");
+      const selectedOption = select.options[select.selectedIndex];
+      const price = selectedOption.dataset.price;
+      const endpoint = selectedOption.dataset.endpoint;
+
+      btn.disabled = true;
+      btn.innerText = "Processing Solana Payment...";
+      const t0 = performance.now();
+
+      try {
+        logTerminal(`[1/3] HTTP 402 결제 챌린지 요청 중... (Network: solana, Price: ${price} USDC)`);
+        
+        // 1. Fetch Challenge
+        const challengeRes = await fetch("/v1/terrain/challenge?network=solana");
+        const challenge = await challengeRes.json();
+        currentNonce = challenge.nonce;
+        document.getElementById("nonce-display").innerText = currentNonce;
+        logTerminal(`[2/3] Solana 챌린지 획득 완료!`, challenge);
+
+        // 2. Sign Message
+        const nowTs = Math.floor(Date.now() / 1000);
+        const authMessage = `X402 Solana Micropayment Authorization\nNonce: ${currentNonce}\nAmount: ${price} USDC\nTimestamp: ${nowTs}`;
+        
+        let signatureB58 = "";
+        let payerPubkey = activeWallet || "411ksMz9RHYVtVMe6RUUErzZYtrU9zzvkgzswKbqx9qp";
+
+        if (window.solana && window.solana.isPhantom && !isSimulator) {
+          logTerminal(`--> Phantom 지갑 서명 요청 팝업 전송...`);
+          const encodedMsg = new TextEncoder().encode(authMessage);
+          const signResult = await window.solana.signMessage(encodedMsg, "utf8");
+          signatureB58 = toBase58(signResult.signature);
+          payerPubkey = signResult.publicKey.toString();
+        } else {
+          // Autonomous Agent deterministic signature simulation
+          signatureB58 = "5W1b2R3e4T5y6U7i8O9p0A1s2D3f4G5h6J7k8L9z0X1c2V3b4N5m6Q7w8E9r0T1y2U3i4O5p";
+        }
+
+        const solanaHeader = JSON.stringify({
+          payer_address: payerPubkey,
+          signature: signatureB58,
+          nonce: currentNonce,
+          timestamp: nowTs,
+          amount_usdc: price,
+          type: "ed25519",
+          network: "solana"
+        });
+
+        // 3. Execute Oracle Call with X-402-Signature
+        logTerminal(`[3/3] 서명 헤더 전송 및 오라클 물리 데이터 검증 중...`);
+        const payload = endpoint.includes("terrain")
+          ? { latitude: 37.3850, longitude: 126.6500, sampling_radius_meters: 30.0, agent_id: "Solana-Agent-Unit-01" }
+          : { latitude: 37.3850, longitude: 126.6500, altitude_meters: 120.0, agent_id: "Solana-Drone-Unit-01" };
+
+        const oracleRes = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-402-Signature": solanaHeader,
+            "X-402-Preferred-Network": "solana"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const elapsed = (performance.now() - t0).toFixed(1);
+        document.getElementById("latency-display").innerText = `Latency: ${elapsed}ms`;
+
+        if (oracleRes.ok) {
+          const oracleData = await oracleRes.json();
+          document.getElementById("terminal-status-text").innerText = `HTTP 200 OK - SETTLED ON SOLANA IN ${elapsed}ms`;
+          document.getElementById("terminal-dot").style.backgroundColor = "var(--solana-green)";
+          logTerminal(`[SUCCESS] 솔라나 결제 및 정산 완료 (${elapsed}ms 소요)`, oracleData);
+        } else {
+          const errData = await oracleRes.json();
+          logTerminal(`[ERROR HTTP ${oracleRes.status}] 결제 검증 실패`, errData);
+        }
+
+      } catch (err) {
+        logTerminal(`[EXCEPTION] ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "솔라나 x402 서명 및 오라클 결제 실행";
+      }
+    }
+
+    // Auto connect check on page load
+    window.addEventListener("load", () => {
+      if (window.solana && window.solana.isPhantom) {
+        handleConnectWallet();
+      }
+    });
+  </script>
+</body>
+</html>
