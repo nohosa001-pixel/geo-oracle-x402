@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agrid-physical-oracle": {
+      "url": "https://assets-reproductive-became-medicine.trycloudflare.com/mcp/tools",
+      "transport": "sse",
+      "description": "A.GRID Universal Physical AI, Drone Logistics & Parametric Insurance Oracle Suite (x402 Micropayments)"
+    }
+  }
+}
