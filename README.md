@@ -2,6 +2,7 @@
 
 > High-performance Python FastAPI multi-oracle hub delivering deterministic WGS84 terrain physics, atmospheric micro-weather, airspace geofencing, 5G/SatCom coverage, 3D energy-optimal trajectory planning, and full-lifecycle Actuarial Risk Underwriting & Parametric Smart Contract Insurance for autonomous robotics and physical AI agents.
 
+[![CI](https://github.com/nohosa001-pixel/geo-oracle-x402/actions/workflows/ci.yml/badge.svg)](https://github.com/nohosa001-pixel/geo-oracle-x402/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
