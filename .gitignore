@@ -30,3 +30,14 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Databases & Runtime State
+data/*.db
+data/*.sqlite*
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime Dynamic Sync Cache (Auto-updated by live ingestion daemon)
+data/sync_cache.json
+

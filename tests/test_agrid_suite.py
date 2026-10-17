@@ -165,3 +165,38 @@ def test_agrid_machine_credit_scoring():
     r_risk = client.post("/v1/agrid/credit/evaluate", json=p_risk).json()
     assert r_risk["machine_credit_score"] < 550
     assert r_risk["underwriting_recommendations"]["bond_issuance_eligible"] is False
+
+
+def test_agrid_escrow_endpoint_aliases():
+    """Validates that /escrow/verify-poi and /escrow/verify-pod backwards-compatible aliases work identically."""
+    poi_payload = {
+        "mission_id": "0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
+        "carrier_agent": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "cargo_category": "StandardParcel",
+        "origin_lat": 37.3850,
+        "origin_lon": 126.6500,
+        "dest_lat": 37.3980,
+        "dest_lon": 126.6620,
+        "planned_cruise_altitude_m": 60.0,
+        "carrier_mass_kg": 12.0,
+        "cargo_weight_kg": 1.5,
+    }
+    res_poi = client.post("/v1/agrid/escrow/verify-poi", json=poi_payload)
+    assert res_poi.status_code == 200
+    assert res_poi.json()["approved_for_dispatch"] is True
+
+    pod_payload = {
+        "mission_id": "0x1234",
+        "carrier_agent": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "current_lat": 37.3980,
+        "current_lon": 126.6620,
+        "target_dest_lat": 37.3980,
+        "target_dest_lon": 126.6620,
+        "max_recorded_g_force": 1.5,
+        "max_recorded_temp_celsius": 4.5,
+        "required_max_temp": 8.0,
+    }
+    res_pod = client.post("/v1/agrid/escrow/verify-pod", json=pod_payload)
+    assert res_pod.status_code == 200
+    assert res_pod.json()["delivery_verified"] is True
+

@@ -34,6 +34,7 @@ async def get_agent_card_endpoint() -> Dict[str, Any]:
 
 
 @router.post("/escrow/dispatch-verify", summary="Verify PoI & Authorize Escrow Dispatch (EVM EIP-712)")
+@router.post("/escrow/verify-poi", summary="Alias for dispatch-verify (PoI Clearance)")
 async def verify_dispatch(request: DispatchVerificationRequest) -> Dict[str, Any]:
     """
     Evaluates origin/destination terrain, 3D boundary layer weather, and regulatory airspace geofences.
@@ -46,6 +47,7 @@ async def verify_dispatch(request: DispatchVerificationRequest) -> Dict[str, Any
 
 
 @router.post("/escrow/delivery-verify", summary="Verify PoD & Authorize Instant Escrow Disbursement (EVM EIP-712)")
+@router.post("/escrow/verify-pod", summary="Alias for delivery-verify (PoD Release)")
 async def verify_delivery(request: DeliveryVerificationRequest) -> Dict[str, Any]:
     """
     Verifies arrival at delivery coordinates (within 25m), acceleration G-force tolerance,
