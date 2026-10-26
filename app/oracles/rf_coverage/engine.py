@@ -4,6 +4,7 @@ Deterministic RF Propagation, Cellular Link-Budget, and SatCom Mesh Engine.
 
 import math
 import hashlib
+from app.sync.data_registry import LiveDataRegistry
 from app.oracles.rf_coverage.schemas import (
     RFQueryInput,
     CellularCoverage,
@@ -69,12 +70,20 @@ class RFEngine:
             tech = "3G_FALLBACK"
             throughput = 0.5
 
-        # 5. Satellite Sky Clearance & GNSS
+        # 5. Satellite Sky Clearance & GNSS with Live Telemetry Ingestion
+        satcom_feed = LiveDataRegistry._DATA.get("rf_satcom", {})
+        live_starlink_sats = satcom_feed.get("starlink_active_satellites", 6450)
+        gnss_health = satcom_feed.get("gnss_constellation_health", "NOMINAL_100_PCT_HEALTH")
+
+        # Constellation capacity multiplier based on active LEO count (nominal ~6400)
+        sat_mult = max(0.9, min(1.15, live_starlink_sats / 6400.0))
+
         # Higher altitude drastically clears the horizon mask angle
         mask_angle = max(5.0, min(65.0, 45.0 * math.exp(-alt / 80.0) + (1.0 - urban_density) * 10.0))
-        starlink_los = round(max(30.0, min(100.0, 100.0 - mask_angle * 1.1)), 1)
+        starlink_los = round(max(30.0, min(100.0, (100.0 - mask_angle * 1.1) * sat_mult)), 1)
         
-        gnss_sats = int(max(6, min(24, 18 - int(mask_angle / 5.0))))
+        base_sats = 18 if "NOMINAL" in str(gnss_health) else 14
+        gnss_sats = int(max(6, min(24, base_sats - int(mask_angle / 5.0))))
         pdop = round(max(0.9, min(4.5, 1.2 + (mask_angle / 30.0))), 2)
         multipath = round(max(0.05, min(0.90, (mask_angle / 65.0) * 0.7 + urban_density * 0.2)), 3)
 

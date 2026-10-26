@@ -4,6 +4,7 @@ Deterministic Atmospheric Boundary Layer & Micro-Weather Physics Engine.
 
 import math
 import hashlib
+from app.sync.data_registry import LiveDataRegistry
 from app.oracles.weather.schemas import (
     WeatherQueryInput,
     WindVector3D,
@@ -38,9 +39,24 @@ class WeatherEngine:
         phi = math.radians(lat)
         lam = math.radians(lon)
 
-        # 1. Base Sea-Level Surface State
+        # 1. Base Sea-Level Surface State with Live Ingestion Integration
+        weather_feed = LiveDataRegistry._DATA.get("weather", {})
+        pressure_anomaly = float(weather_feed.get("global_pressure_anomaly_hpa", 0.0))
+        regional_mods = weather_feed.get("regional_wind_modifiers", {})
+
+        reg_key = None
+        if -20.0 <= lon <= 45.0 and 30.0 <= lat <= 70.0:
+            reg_key = "EUROPE_CENTRAL"
+        elif -170.0 <= lon <= -50.0 and 20.0 <= lat <= 75.0:
+            reg_key = "AMERICA_NORTH"
+        elif 70.0 <= lon <= 150.0 and 15.0 <= lat <= 60.0:
+            reg_key = "ASIA_EAST"
+
+        gust_factor_mod = regional_mods.get(reg_key, {}).get("gust_factor", 1.0) if reg_key else 1.0
+        u_offset_mod = regional_mods.get(reg_key, {}).get("u_offset", 0.0) if reg_key else 0.0
+
         t_base_c = 15.0 - 0.45 * abs(lat) + 8.0 * math.sin(3.0 * lam + 1.2) * math.cos(2.0 * phi)
-        p_base_hpa = 1013.25 + 18.0 * math.cos(5.0 * phi) * math.sin(4.0 * lam)
+        p_base_hpa = 1013.25 + 18.0 * math.cos(5.0 * phi) * math.sin(4.0 * lam) + pressure_anomaly
         rh_base_pct = max(20.0, min(95.0, 55.0 + 30.0 * math.sin(7.0 * phi) * math.cos(5.0 * lam)))
 
         # 2. Atmospheric Barometric Lapse

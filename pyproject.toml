@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geo-oracle-x402"
+version = "2.2.1"
+description = "A.GRID Physical AI & Autonomous Logistics Oracle Suite with Multichain x402 Micropayments (Polygon, Base, Arbitrum, Solana)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "A.GRID Core Team", email = "dev@agrid.network" }
+]
+keywords = [
+    "ai-agent",
+    "x402",
+    "mcp",
+    "solana",
+    "polygon",
+    "base",
+    "arbitrum",
+    "logistics-escrow",
+    "depin",
+    "physical-ai",
+    "weather-oracle",
+    "geofence",
+    "fastapi"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14"
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.8.0",
+    "numpy>=1.26.0",
+    "eth-account>=0.13.0",
+    "python-dotenv>=1.0.0",
+    "web3>=7.0.0",
+    "py-solc-x>=2.0.0",
+    "cryptography>=41.0.0",
+    "websockets>=12.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0"
+]
+
+[project.urls]
+Homepage = "https://agrid.network"
+Documentation = "https://agrid.network/docs"
+Repository = "https://github.com/nohosa001-pixel/geo-oracle-x402"
+
+[project.scripts]
+geo-oracle = "main:main"
+agrid-mcp = "mcp_server:main"
+
+[tool.setuptools]
+py-modules = ["main", "mcp_server"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.txt", ".well-known/*"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "contracts*", "data*"]
+exclude = ["tests*", "*.pyc", "__pycache__*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.legacy.*",
+    "ignore::DeprecationWarning:pkg_resources.*",
+]
