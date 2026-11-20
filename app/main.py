@@ -1,33 +1,33 @@
 """
-Global Autonomous Physical AI & Insurance Oracle Suite (x402) - FastAPI Unified Hub.
-Includes Background Live Data Sync Daemon for NOAA Weather, NOTAM Airspace, and SatCom Feeds.
+A.GRID Earth Physical Infrastructure Risk Hub (geo-oracle-x402 v3.0.0) - FastAPI Unified Hub.
+Aggregates WGS84 Terrain, Micro-Weather, 5G/Starlink RF Connectivity, and live Cloud Run
+Seismic & Climate Sub-Oracles for Global Physical Infrastructure (Data Centers, Ports, Mines,
+Power Grids, Subsea Cables, Farms, Logistics Hubs).
 """
 
 import json
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from app.core.x402_verifier import (
-    POLYGON_CHAIN_ID,
-    USDC_POLYGON_ADDRESS,
     ORACLE_RECIPIENT_WALLET,
     SOLANA_ORACLE_VAULT,
     SOLANA_USDC_MINT,
 )
-from app.sync.scheduler import DataSyncScheduler
 from app.sync.data_registry import LiveDataRegistry
+from app.sync.scheduler import DataSyncScheduler
 
+from app.oracles.infrastructure.router import (
+    CLIMATE_ORACLE_URL,
+    SEISMIC_ORACLE_URL,
+    router as infrastructure_router,
+)
+from app.oracles.rf_coverage.router import router as rf_router
 from app.oracles.terrain.router import router as terrain_router
 from app.oracles.weather.router import router as weather_router
-from app.oracles.geofence.router import router as geofence_router
-from app.oracles.rf_coverage.router import router as rf_router
-from app.oracles.energy_routing.router import router as routing_router
-from app.oracles.insurance.router import router as insurance_router
-from app.agrid.router import router as agrid_router
-from app.agrid.agent_card import get_agrid_agent_card
 
 
 @asynccontextmanager
@@ -39,21 +39,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Autonomous Physical AI & Insurance Oracle Suite (x402 on Polygon)",
+    title="A.GRID Earth Physical Infrastructure Risk Hub (geo-oracle-x402)",
     description=(
-        "Production-grade micro-oracle hub delivering deterministic spatial terrain physics, "
-        "atmospheric turbulence, airspace regulatory geofencing, 5G/SatCom link margins, "
-        "3D energy-optimal trajectory planning, and full-lifecycle Risk Underwriting & "
-        "Parametric Smart Contract Insurance for autonomous robotics & physical AI agents. "
-        "Maintains continuous background synchronization with NOAA, ICAO NOTAM, and Starlink ephemeris feeds."
+        "Global Earth Physical Infrastructure Risk Database & Oracle Hub (x402 Multi-Chain & Solana). "
+        "Synthesizes WGS84 terrain, micro-weather, 5G/Starlink connectivity redundancy, and live "
+        "seismic & climate sub-oracles for AI Data Centers, Ports, Mines, Power Grids, Subsea Cables, "
+        "Farms, and Logistics Hubs."
     ),
-    version="2.2.0",
+    version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# Enable CORS for autonomous agent interop & web tooling
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,30 +64,28 @@ app.add_middleware(
         "X-402-Payer",
         "X-402-Proof-Hash",
         "X-402-Rejection-Reason",
-        "X-Insurance-Policy-ID",
-        "X-Flight-Clearance",
-        "X-Claim-Verdict",
     ],
 )
 
-# Register All 6 Modular Oracle Routers
+# Register Earth Physical Infrastructure Routers (legacy drone/robotics/insurance modules removed)
+app.include_router(infrastructure_router)
 app.include_router(terrain_router)
 app.include_router(weather_router)
-app.include_router(geofence_router)
 app.include_router(rf_router)
-app.include_router(routing_router)
-app.include_router(insurance_router)
-app.include_router(agrid_router)
 
 
-@app.get("/", tags=["Oracle Hub Info"])
+@app.get("/", tags=["Earth Infrastructure Hub"])
 async def root_info():
-    """Returns general multi-oracle metadata, catalog endpoints, and protocol specifications."""
+    """Returns Earth Physical Infrastructure Risk Hub metadata and active oracle catalog."""
     return {
-        "service": "autonomous-physical-ai-oracle-suite",
-        "name": "Autonomous Physical AI & Insurance Oracle Suite (x402 Multi-Chain & Solana)",
-        "version": "2.2.0",
-        "live_sync_daemon": "ACTIVE (Continuous Ingestion)",
+        "service": "geo-oracle-x402",
+        "name": "A.GRID Earth Physical Infrastructure Risk Hub",
+        "version": "3.0.0",
+        "live_sync_daemon": "ACTIVE",
+        "connected_sub_oracles": {
+            "seismic": SEISMIC_ORACLE_URL,
+            "climate": CLIMATE_ORACLE_URL,
+        },
         "monetization": {
             "protocol": "x402 Multi-Chain & Solana Protocol",
             "settlement_networks": ["solana", "polygon", "base", "arbitrum", "ethereum"],
@@ -108,124 +104,62 @@ async def root_info():
                 "signature_type": "EIP-712",
             },
         },
-        "solana_pay_portal": "/solana-pay",
         "oracles_catalog": [
             {
+                "id": "earth-infrastructure-hub",
+                "name": "Earth Physical Infrastructure Risk Hub (Unified)",
+                "endpoint": "POST /v1/infrastructure/assess",
+                "free_preview": "POST /v1/infrastructure/preview",
+                "price_usdc": "0.015",
+                "description": "Unified physical risk assessment for DATA_CENTER, PORT, MINE, POWER_GRID, SUBSEA_CABLE, FARM, and LOGISTICS_HUB combining Terrain + Weather + 5G/Starlink + live Seismic & Climate sub-oracles.",
+            },
+            {
                 "id": "terrain-oracle",
-                "name": "Geo-Terrain & Trafficability Oracle",
+                "name": "WGS84 Geo-Terrain & Elevation Oracle",
                 "endpoint": "POST /v1/terrain/analyze",
                 "price_usdc": "0.005",
-                "description": "WGS84 elevation, slope vectors, aspect, and robotic locomotion scoring.",
+                "description": "WGS84 elevation, slope vectors, and surface stability scoring for physical sites.",
             },
             {
                 "id": "weather-oracle",
-                "name": "Micro-Weather & Turbulence Oracle",
+                "name": "Site Micro-Weather & Atmospheric Oracle",
                 "endpoint": "POST /v1/weather/analyze",
                 "price_usdc": "0.005",
-                "description": "3D wind fields, boundary layer shear, EDR turbulence, and VTOL stability.",
-            },
-            {
-                "id": "geofence-oracle",
-                "name": "Airspace & Regulatory Geofence Oracle",
-                "endpoint": "POST /v1/geofence/check",
-                "price_usdc": "0.005",
-                "description": "Airspace classification (Class A-G), No-Fly Zone (NFZ), and dynamic NOTAM regulations.",
+                "description": "Site-level wind fields, ambient temperature, humidity, and icing risk.",
             },
             {
                 "id": "rf-coverage-oracle",
-                "name": "RF Line-of-Sight & SatCom Mesh Oracle",
+                "name": "5G/LTE & Starlink SatCom Redundancy Oracle",
                 "endpoint": "POST /v1/rf/coverage",
                 "price_usdc": "0.005",
-                "description": "Terrestrial 5G/LTE path loss, Starlink/GNSS clearance angles, and link margin.",
-            },
-            {
-                "id": "energy-routing-oracle",
-                "name": "Kinematic & Energy-Optimal 3D Routing Oracle",
-                "endpoint": "POST /v1/routing/energy-optimal",
-                "price_usdc": "0.010",
-                "description": "3D waypoint trajectory planning minimizing Watt-hour battery expenditure.",
-            },
-            {
-                "id": "insurance-underwrite-oracle",
-                "name": "Risk Underwriting & Proof of Insurability (PoI) Oracle",
-                "endpoint": "POST /v1/insurance/underwrite",
-                "price_usdc": "0.025",
-                "description": "Synthesizes 5 physical dimensions into actuarial mission risk, dynamic premium, and Proof of Insurability clearance.",
-            },
-            {
-                "id": "parametric-claim-oracle",
-                "name": "Smart Contract Parametric Claim Adjudication Oracle",
-                "endpoint": "POST /v1/insurance/claim-verify",
-                "price_usdc": "0.050",
-                "description": "Automated blackbox telemetry cross-check and instant onchain payout disbursement authorization.",
-            },
-            {
-                "id": "agrid-escrow-dispatch-oracle",
-                "name": "A.GRID Pre-Flight Proof of Insurability (PoI) Clearance (EVM)",
-                "endpoint": "POST /v1/agrid/escrow/dispatch-verify",
-                "aliases": ["POST /v1/agrid/escrow/verify-poi"],
-                "price_usdc": "0.025",
-                "description": "Verifies atmospheric risk, no-fly zones, and issues EIP-712 dispatch clearance proof for AutonomousLogisticsEscrow.sol.",
-            },
-            {
-                "id": "agrid-escrow-delivery-oracle",
-                "name": "A.GRID Proof of Delivery (PoD) Escrow Arbiter (EVM)",
-                "endpoint": "POST /v1/agrid/escrow/delivery-verify",
-                "aliases": ["POST /v1/agrid/escrow/verify-pod"],
-                "price_usdc": "0.025",
-                "description": "Verifies destination arrival GPS, cold-chain temperature SLAs, shock G-force, and authorizes instant on-chain fund release.",
-            },
-            {
-                "id": "agrid-solana-dispatch-oracle",
-                "name": "A.GRID Solana Anchor Escrow Dispatch (Ed25519 PoI)",
-                "endpoint": "POST /v1/agrid/escrow/solana/dispatch-verify",
-                "price_usdc": "0.025",
-                "description": "Evaluates physical constraints and signs 64-byte Ed25519 PoI authorization proof for Solana Anchor program.",
-            },
-            {
-                "id": "agrid-solana-delivery-oracle",
-                "name": "A.GRID Solana Anchor Escrow Delivery Release (Ed25519 PoD)",
-                "endpoint": "POST /v1/agrid/escrow/solana/delivery-verify",
-                "price_usdc": "0.025",
-                "description": "Validates physical arrival, impact shock, and cold-chain envelope, then generates 64-byte Ed25519 PoD signature for Solana SPL USDC instant release.",
-            },
-            {
-                "id": "agrid-bvlos-compliance-oracle",
-                "name": "FAA Part 108 BVLOS & EASA SORA 2.5 Airspace Compliance Audit",
-                "endpoint": "POST /v1/agrid/compliance/bvlos-audit",
-                "price_usdc": "0.015",
-                "description": "Quantitative compliance audit against FAA Part 108 BVLOS rulemaking and EASA SORA 2.5 SAIL rating.",
-            },
-            {
-                "id": "agrid-coldchain-compliance-oracle",
-                "name": "WHO PQS & FDA 21 CFR Cold-Chain Vaccine & Bio Audit",
-                "endpoint": "POST /v1/agrid/compliance/coldchain-audit",
-                "price_usdc": "0.015",
-                "description": "Calculates Mean Kinetic Temperature (MKT), thermal envelope excursion, and verifies pharma release criteria.",
-            },
-            {
-                "id": "agrid-machine-credit-oracle",
-                "name": "A.GRID Autonomous Machine Credit Scorer & Bond Underwriter",
-                "endpoint": "POST /v1/agrid/credit/evaluate",
-                "price_usdc": "0.010",
-                "description": "Computes machine FICO credit score (300-850), default probability, and collateral-free loan & ABS bond tranche limits.",
-            },
-            {
-                "id": "agrid-telemetry-stream",
-                "name": "Live Telemetry Stream (1Hz Bidirectional WebSocket)",
-                "endpoint": "WS /v1/agrid/stream/telemetry/{mission_id}",
-                "price_usdc": "Stream (Included)",
-                "description": "Real-time G-force shock, cold-chain breach, low battery, and auto-reroute telemetry stream.",
+                "description": "Terrestrial 5G/LTE RSRP, Starlink LEO visibility, and GNSS PDOP failover readiness.",
             },
         ],
         "standards": {
-            "google_ap2_manifest": "/.well-known/ap2",
-            "agrid_agent_card": "/.well-known/agrid.json",
-            "fastmcp_spec": "/mcp/tools",
+            "llms_txt": "/llms.txt",
+            "agent_card": "/.well-known/agent-card.json",
+            "google_ap2_manifest": "/.well-known/ap2.json",
             "openapi_docs": "/docs",
             "live_sync_telemetry": "/v1/system/sync-status",
         },
     }
+
+
+@app.get("/llms.txt", response_class=PlainTextResponse, tags=["Agent Standards"])
+async def serve_llms_txt():
+    """Standard llms.txt descriptor for AI agents and infrastructure risk analysts."""
+    return (
+        "# A.GRID Earth Physical Infrastructure Risk Hub (geo-oracle-x402 v3.0.0)\n\n"
+        "> Unified physical risk database and real-time hazard oracle for Earth's critical infrastructure: "
+        "AI Data Centers, Ports, Mines, Power Grids, Subsea Cables, Farms, and Logistics Hubs.\n\n"
+        "## Core Endpoints\n"
+        "- `GET /v1/infrastructure/catalog` (Free): Supported asset classes & live sub-oracle endpoints.\n"
+        "- `POST /v1/infrastructure/preview` (Free): Run a live multi-layer physical risk preview for any WGS84 coordinate.\n"
+        "- `POST /v1/infrastructure/assess` (x402, 0.015 USDC): Verified assessment with deterministic proof hash.\n"
+        "- `POST /v1/terrain/analyze` (x402, 0.005 USDC): WGS84 terrain elevation & slope.\n"
+        "- `POST /v1/weather/analyze` (x402, 0.005 USDC): Site micro-weather & atmospheric conditions.\n"
+        "- `POST /v1/rf/coverage` (x402, 0.005 USDC): 5G/LTE & Starlink LEO connectivity redundancy.\n"
+    )
 
 
 @app.get("/solana-pay", response_class=HTMLResponse, tags=["Solana Web3 Portal"])
@@ -243,9 +177,15 @@ async def health_check():
     """Service liveness, readiness, and background sync probe."""
     return {
         "status": "healthy",
-        "active_oracles": 15,
-        "ecosystem": "A.GRID Autonomous Agent & Physical AI Logistics Grid",
+        "service": "geo-oracle-x402",
+        "version": "3.0.0",
+        "active_oracles": 4,
+        "ecosystem": "A.GRID Earth Physical Infrastructure Risk Hub",
         "live_sync_daemon": "RUNNING",
+        "connected_sub_oracles": {
+            "seismic": SEISMIC_ORACLE_URL,
+            "climate": CLIMATE_ORACLE_URL,
+        },
         "settlement_networks": ["solana", "polygon", "base", "arbitrum", "ethereum"],
         "solana_treasury_vault": SOLANA_ORACLE_VAULT,
         "evm_recipient_wallet": ORACLE_RECIPIENT_WALLET,
@@ -264,8 +204,38 @@ async def trigger_force_sync():
     """Forces an immediate on-demand synchronization cycle across all data feeds."""
     await DataSyncScheduler.run_full_sync_cycle()
     return {
-        "message": "Full synchronization cycle executed successfully across NOAA Weather, NOTAM Airspace, and SatCom feeds.",
+        "message": "Full synchronization cycle executed successfully.",
         "status": LiveDataRegistry.get_sync_status(),
+    }
+
+
+@app.get("/.well-known/agent.json", tags=["Agent Standards"])
+@app.get("/.well-known/agent-card.json", tags=["Agent Standards"])
+@app.get("/.well-known/agents.json", tags=["Agent Standards"])
+async def get_agent_card():
+    """A2A standard agent-card.json manifest for Earth Physical Infrastructure Risk Hub."""
+    return {
+        "schema_version": "v1",
+        "name": "geo-oracle-x402",
+        "display_name": "A.GRID Earth Physical Infrastructure Risk Hub",
+        "version": "3.0.0",
+        "description": (
+            "Evaluates real-time physical infrastructure risks for AI Data Centers, Ports, Mines, "
+            "Power Grids, Subsea Cables, Farms, and Logistics Hubs by combining WGS84 terrain, "
+            "micro-weather, 5G/Starlink connectivity redundancy, and live seismic & climate sub-oracles."
+        ),
+        "endpoints": {
+            "free_catalog": "/v1/infrastructure/catalog",
+            "free_preview": "/v1/infrastructure/preview",
+            "paid_assess": "/v1/infrastructure/assess",
+            "llms_txt": "/llms.txt",
+            "openapi": "/openapi.json",
+        },
+        "settlement": {
+            "protocol": "x402",
+            "evm_recipient": ORACLE_RECIPIENT_WALLET,
+            "solana_vault": SOLANA_ORACLE_VAULT,
+        },
     }
 
 
@@ -273,32 +243,11 @@ async def trigger_force_sync():
 @app.get("/.well-known/ap2.json", tags=["Agent Standards"])
 async def get_google_ap2_manifest():
     """Google AP2 (Agent Protocol 2) machine-readable manifest."""
-    manifest_path = Path(__file__).resolve().parent.parent / ".well-known" / "ap2.json"
-    if manifest_path.exists():
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
     return {
         "$schema": "https://agentprotocol.ai/schemas/ap2-manifest.json",
-        "name": "autonomous-physical-ai-oracle-suite",
-        "display_name": "Autonomous Physical AI & Insurance Oracle Suite",
-        "version": "2.2.0",
+        "name": "geo-oracle-x402",
+        "display_name": "A.GRID Earth Physical Infrastructure Risk Hub",
+        "version": "3.0.0",
         "recipient_address": ORACLE_RECIPIENT_WALLET,
+        "solana_vault": SOLANA_ORACLE_VAULT,
     }
-
-
-@app.get("/.well-known/agrid", tags=["Agent Standards"])
-@app.get("/.well-known/agrid.json", tags=["Agent Standards"])
-async def get_agrid_manifest():
-    """A.GRID (Agent Grid) Semantic Machine Manifest & Capability Card."""
-    return get_agrid_agent_card()
-
-
-@app.get("/mcp/tools", tags=["Agent Standards"])
-async def get_mcp_tool_spec():
-    """Returns FastMCP / MCP tool specification definition."""
-    spec_path = Path(__file__).resolve().parent.parent / "mcp_tool_spec.json"
-    if spec_path.exists():
-        with open(spec_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"tools": []}

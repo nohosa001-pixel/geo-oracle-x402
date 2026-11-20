@@ -127,7 +127,8 @@ async def test_tampered_signature_rejected(test_agent, attacker_wallet):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         payload = {"latitude": 37.5665, "longitude": 126.9780}
-        res_unpaid = await client.post("/v1/geofence/check", json=payload)
+        res_unpaid = await client.post("/v1/terrain/analyze", json=payload)
+        assert res_unpaid.status_code == 402
         challenge = res_unpaid.json()
         nonce = challenge["nonce"]
 
@@ -154,7 +155,7 @@ async def test_tampered_signature_rejected(test_agent, attacker_wallet):
         }
 
         res = await client.post(
-            "/v1/geofence/check",
+            "/v1/terrain/analyze",
             json=payload,
             headers={"X-402-Signature": json.dumps(auth_header)},
         )

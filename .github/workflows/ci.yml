@@ -26,10 +26,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Pytest Suite (41 Tests)
+      - name: Run Pytest Suite
         run: |
           python -m pytest -v
-
-      - name: Run Full-Lifecycle Future Logistics Simulation
-        run: |
-          python simulate_future_logistics_bvlos_coldchain.py

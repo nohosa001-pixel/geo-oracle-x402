@@ -31,37 +31,38 @@ def agent_wallet():
 
 @pytest.mark.asyncio
 async def test_health_and_root_endpoints():
-    """Verifies service health, root metadata, and AP2 manifest endpoints."""
+    """Verifies service health, root metadata, agent-card, llms.txt, and AP2 manifest endpoints."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Test Root Info
         root_res = await client.get("/")
         assert root_res.status_code == 200
         root_data = root_res.json()
-        assert root_data["service"] == "autonomous-physical-ai-oracle-suite"
-        assert root_data["version"] == "2.2.0"
-        assert len(root_data["oracles_catalog"]) >= 7
+        assert root_data["service"] == "geo-oracle-x402"
+        assert root_data["version"] == "3.0.0"
+        assert len(root_data["oracles_catalog"]) == 4
 
         # Test Health
         health_res = await client.get("/health")
         assert health_res.status_code == 200
         assert health_res.json()["status"] == "healthy"
-        assert health_res.json()["active_oracles"] >= 6
+        assert health_res.json()["active_oracles"] == 4
+
+        # Test Agent Card & llms.txt
+        card_res = await client.get("/.well-known/agent-card.json")
+        assert card_res.status_code == 200
+        assert card_res.json()["name"] == "geo-oracle-x402"
+
+        llms_res = await client.get("/llms.txt")
+        assert llms_res.status_code == 200
+        assert "/v1/infrastructure/assess" in llms_res.text
 
         # Test Google AP2 Manifest
         ap2_res = await client.get("/.well-known/ap2")
         assert ap2_res.status_code == 200
         ap2_data = ap2_res.json()
-        assert ap2_data["name"] == "autonomous-physical-ai-oracle-suite"
-        assert ap2_data["monetization"]["network"] == "polygon"
-        assert len(ap2_data["capabilities"]) == 7
-
-        # Test FastMCP Spec
-        mcp_res = await client.get("/mcp/tools")
-        assert mcp_res.status_code == 200
-        mcp_data = mcp_res.json()
-        assert "tools" in mcp_data
-        assert len(mcp_data["tools"]) >= 7  # 10 tools supported in v2.2.0 suite
+        assert ap2_data["name"] == "geo-oracle-x402"
+        assert ap2_data["version"] == "3.0.0"
 
 
 @pytest.mark.asyncio

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geo-oracle-x402"
-version = "2.2.1"
-description = "A.GRID Physical AI & Autonomous Logistics Oracle Suite with Multichain x402 Micropayments (Polygon, Base, Arbitrum, Solana)"
+version = "3.0.0"
+description = "A.GRID Earth Physical Infrastructure Risk Hub with Multichain x402 Micropayments (Polygon, Base, Arbitrum, Solana)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -61,13 +61,6 @@ dev = [
 Homepage = "https://agrid.network"
 Documentation = "https://agrid.network/docs"
 Repository = "https://github.com/nohosa001-pixel/geo-oracle-x402"
-
-[project.scripts]
-geo-oracle = "main:main"
-agrid-mcp = "mcp_server:main"
-
-[tool.setuptools]
-py-modules = ["main", "mcp_server"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.txt", ".well-known/*"]
