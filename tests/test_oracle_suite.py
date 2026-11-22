@@ -173,8 +173,11 @@ async def test_infrastructure_catalog_and_free_preview():
             )
             assert r_prev.status_code == 200
             prev = r_prev.json()
-            assert prev["schema_version"] == "earth-infra-risk/1.2"
+            assert prev["schema_version"] == "earth-infra-risk/2.0"
             assert "hydrology_flood" in prev["layers"]
+            assert "usgs_seismic_30d" in prev["layers"]
+            assert "nasa_active_hazards" in prev["layers"]
+            assert "digital_infrastructure" in prev["layers"]
             assert "wet_bulb_celsius" in prev["layers"]["weather"]
             assert "data_provenance" in prev
             assert prev["mode"] == "FREE_PREVIEW"
@@ -356,3 +359,50 @@ def test_site_indicators_wet_bulb_and_glofas_flood():
     assert flood == "HIGH"
     assert cooling == "HIGH"
     assert penalty == 24.0
+
+
+def test_flood_false_positive_prevented_for_tiny_stream():
+    from app.oracles.infrastructure.router import _classify_site_indicators
+
+    # Seoul urban stream (0.9 -> 6.35 m3/s, 7.06x ratio) at 34m elevation with 0mm rain must stay LOW
+    flood, _, _, _ = _classify_site_indicators(
+        elevation_m=34.0,
+        temp_c=4.2,
+        wind_mps=1.2,
+        asset_type="DATA_CENTER",
+        precipitation_mm=0.0,
+        river_discharge_3d_max_m3s=6.35,
+        flood_surge_ratio=7.06,
+    )
+    assert flood == "LOW"
+
+
+def test_tier1_spatial_filters():
+    from app.core.tier1_earth_feeds import filter_eonet_events_near, filter_telegeography_near
+
+    mock_events = [
+        {
+            "title": "Test Wildfire Near Site",
+            "categories": [{"id": "wildfires"}],
+            "geometry": [{"date": "2026-11-20T00:00:00Z", "coordinates": [127.0, 37.6]}],
+        },
+        {
+            "title": "Distant Storm",
+            "categories": [{"id": "severeStorms"}],
+            "geometry": [{"date": "2026-11-20T00:00:00Z", "coordinates": [-80.0, 25.0]}],
+        },
+    ]
+    eonet = filter_eonet_events_near(mock_events, 37.5665, 126.9780, radius_km=100.0)
+    assert eonet["active_events_within_radius"] == 1
+    assert eonet["wildfires_nearby"] == 1
+    assert eonet["nearest_event"]["title"] == "Test Wildfire Near Site"
+
+    mock_cables = [
+        {
+            "properties": {"id": "busan-kr", "name": "Busan, South Korea"},
+            "geometry": {"coordinates": [129.0756, 35.1796]},
+        }
+    ]
+    subsea = filter_telegeography_near(mock_cables, 35.0755, 128.8170, radius_km=150.0)
+    assert subsea["landing_stations_within_150km"] == 1
+    assert subsea["nearest_landing_station"]["id"] == "busan-kr"

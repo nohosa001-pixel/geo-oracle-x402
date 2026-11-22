@@ -27,6 +27,12 @@ from app.core.live_earth_feeds import (
     fetch_live_weather,
 )
 from app.core.observability import log_event
+from app.core.tier1_earth_feeds import (
+    fetch_nasa_eonet_hazards,
+    fetch_peeringdb_facilities,
+    fetch_telegeography_subsea,
+    fetch_usgs_seismic,
+)
 from app.core.x402_verifier import X402Verifier
 from app.oracles.infrastructure.registry import get_asset_by_id, list_assets
 from app.oracles.rf_coverage.engine import RFEngine
@@ -48,6 +54,8 @@ CLIMATE_ORACLE_URL = os.getenv(
     "https://climate-insurance-agent-212942243360.asia-northeast3.run.app",
 ).rstrip("/")
 SUBORACLE_TIMEOUT_SEC = float(os.getenv("SUBORACLE_TIMEOUT_SEC", "10.0"))
+SUBORACLE_CACHE_TTL_SEC = float(os.getenv("SUBORACLE_CACHE_TTL_SEC", "300.0"))
+_SUBORACLE_CACHE: Dict[tuple, tuple[float, Dict[str, Any]]] = {}
 
 AssetType = Literal[
     "DATA_CENTER",
@@ -98,6 +106,12 @@ def _resolve_asset_coordinates(req: InfrastructureAssessRequest) -> tuple[float,
 async def _query_seismic_suboracle(
     asset_id: str, lat: float, lon: float, asset_type: str, commodity: str, use_live_feed: bool
 ) -> Dict[str, Any]:
+    cache_key = ("seismic", round(lat, 2), round(lon, 2), asset_type)
+    now = time.time()
+    cached = _SUBORACLE_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < SUBORACLE_CACHE_TTL_SEC:
+        return cached[1]
+
     payload = {
         "waypoints": [
             {
@@ -115,7 +129,7 @@ async def _query_seismic_suboracle(
             resp = await client.post(f"{SEISMIC_ORACLE_URL}/api/trade-oracle/assess-route", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return {
+            result = {
                 "status": "OK",
                 "action": data.get("route_trade_action", "CLEAR"),
                 "severity": float(data.get("max_severity_score", 0.0)),
@@ -123,6 +137,8 @@ async def _query_seismic_suboracle(
                 "alternate_hubs": data.get("alternate_hubs_suggested", []),
                 "url": SEISMIC_ORACLE_URL,
             }
+            _SUBORACLE_CACHE[cache_key] = (now, result)
+            return result
     except Exception as exc:
         log_event(
             "suboracle_degraded_fallback",
@@ -145,6 +161,12 @@ async def _query_seismic_suboracle(
 async def _query_climate_suboracle(
     asset_id: str, lat: float, lon: float, asset_type: str, commodity: str, use_live_feed: bool
 ) -> Dict[str, Any]:
+    cache_key = ("climate", round(lat, 2), round(lon, 2), asset_type)
+    now = time.time()
+    cached = _SUBORACLE_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < SUBORACLE_CACHE_TTL_SEC:
+        return cached[1]
+
     payload = {
         "waypoints": [
             {
@@ -162,13 +184,15 @@ async def _query_climate_suboracle(
             resp = await client.post(f"{CLIMATE_ORACLE_URL}/api/trade-oracle/assess-route", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return {
+            result = {
                 "status": "OK",
                 "action": data.get("route_trade_action", "CLEAR"),
                 "severity": float(data.get("max_severity_score", 0.0)),
                 "force_majeure": bool(data.get("force_majeure_triggered", False)),
                 "url": CLIMATE_ORACLE_URL,
             }
+            _SUBORACLE_CACHE[cache_key] = (now, result)
+            return result
     except Exception as exc:
         log_event(
             "suboracle_degraded_fallback",
@@ -203,12 +227,13 @@ def _classify_site_indicators(
     and ECMWF GloFAS river flood surge forecasts.
     """
     heavy_rain = precipitation_mm >= 15.0
-    glofas_flood_surge = river_discharge_3d_max_m3s >= 500.0 and flood_surge_ratio >= 2.0
+    glofas_flood_high = river_discharge_3d_max_m3s >= 500.0 and flood_surge_ratio >= 2.0
+    glofas_flood_mod = river_discharge_3d_max_m3s >= 50.0 and flood_surge_ratio >= 2.5
 
-    if asset_type != "SUBSEA_CABLE" and (elevation_m < 5.0 or glofas_flood_surge or (elevation_m < 15.0 and heavy_rain)):
+    if asset_type != "SUBSEA_CABLE" and (elevation_m < 5.0 or glofas_flood_high or (elevation_m < 15.0 and heavy_rain)):
         flood_risk = "HIGH"
         flood_penalty = 12.0
-    elif asset_type != "SUBSEA_CABLE" and (elevation_m < 15.0 or precipitation_mm >= 5.0 or flood_surge_ratio >= 2.5):
+    elif asset_type != "SUBSEA_CABLE" and (elevation_m < 15.0 or precipitation_mm >= 5.0 or glofas_flood_mod):
         flood_risk = "MODERATE"
         flood_penalty = 5.0
     else:
@@ -249,12 +274,26 @@ async def _run_infrastructure_assessment(
     t0 = time.perf_counter()
     lat, lon, asset_type, commodity, asset_name = _resolve_asset_coordinates(req)
 
-    # 1. Concurrent live Earth telemetry (Copernicus 5-pt DEM + Open-Meteo Weather + ECMWF GloFAS Flood + Cloud Run Seismic & Climate)
+    # 1. Concurrent live Earth & Tier-1 Digital Infrastructure telemetry (9 layers in parallel)
     if req.use_live_feed:
-        elev_data, weather_data, flood_data, seismic, climate = await asyncio.gather(
+        (
+            elev_data,
+            weather_data,
+            flood_data,
+            usgs_data,
+            eonet_data,
+            subsea_data,
+            peering_data,
+            seismic,
+            climate,
+        ) = await asyncio.gather(
             fetch_live_elevation(lat, lon),
             fetch_live_weather(lat, lon),
             fetch_live_flood(lat, lon),
+            fetch_usgs_seismic(lat, lon),
+            fetch_nasa_eonet_hazards(lat, lon),
+            fetch_telegeography_subsea(lat, lon),
+            fetch_peeringdb_facilities(lat, lon),
             _query_seismic_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
             _query_climate_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
         )
@@ -281,6 +320,10 @@ async def _run_infrastructure_assessment(
             "flood_surge_ratio": 1.0,
             "source": "DETERMINISTIC_FALLBACK",
         }
+        usgs_data = {"event_count_30d": 0, "max_magnitude_30d": 0.0, "nearest_event_km": None, "nearest_event_place": None, "radius_km": 300.0, "source": "DETERMINISTIC_FALLBACK"}
+        eonet_data = {"active_events_within_radius": 0, "wildfires_nearby": 0, "storms_nearby": 0, "volcanoes_nearby": 0, "nearest_event": None, "radius_km": 250.0, "source": "DETERMINISTIC_FALLBACK"}
+        subsea_data = {"landing_stations_within_150km": 0, "nearest_landing_station": None, "source": "DETERMINISTIC_FALLBACK"}
+        peering_data = {"nearby_dc_ixp_count": 0, "total_peering_networks": 0, "nearest_facility": None, "source": "DETERMINISTIC_FALLBACK"}
         seismic = {"status": "DEGRADED_FALLBACK", "action": "CLEAR", "severity": 0.0, "force_majeure": False, "alternate_hubs": [], "url": SEISMIC_ORACLE_URL}
         climate = {"status": "DEGRADED_FALLBACK", "action": "CLEAR", "severity": 0.0, "force_majeure": False, "url": CLIMATE_ORACLE_URL}
 
@@ -382,6 +425,16 @@ async def _run_infrastructure_assessment(
         bcbs_flags.append("LIMITED_SATCOM_FAILOVER")
     if seismic["status"] != "OK" or climate["status"] != "OK":
         bcbs_flags.append("SUBORACLE_CONTINGENCY_FALLBACK_ACTIVE")
+    if eonet_data.get("wildfires_nearby", 0) > 0:
+        bcbs_flags.append("ACTIVE_NASA_WILDFIRE_PROXIMITY")
+    if eonet_data.get("storms_nearby", 0) > 0:
+        bcbs_flags.append("ACTIVE_NASA_SEVERE_STORM_PROXIMITY")
+    if usgs_data.get("max_magnitude_30d", 0.0) >= 5.0:
+        bcbs_flags.append("USGS_RECENT_SIGNIFICANT_SEISMIC")
+    if peering_data.get("total_peering_networks", 0) >= 50:
+        bcbs_flags.append("HIGH_PEERING_DENSITY_HUB")
+    if subsea_data.get("landing_stations_within_150km", 0) > 0:
+        bcbs_flags.append("SUBSEA_CABLE_LANDING_PROXIMITY")
 
     latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
@@ -399,7 +452,7 @@ async def _run_infrastructure_assessment(
     proof_hash = "0x" + hashlib.sha256(proof_payload.encode("utf-8")).hexdigest()
 
     return {
-        "schema_version": "earth-infra-risk/1.2",
+        "schema_version": "earth-infra-risk/2.0",
         "mode": "FREE_PREVIEW" if preview else "VERIFIED_PAID",
         "asset": {
             "asset_id": req.asset_id,
@@ -454,6 +507,12 @@ async def _run_infrastructure_assessment(
                 "gnss_pdop": rf.satellite.gnss_pdop,
                 "data_source": "ORBITAL_SHELL_PHYSICS_AND_DEM_HORIZON",
             },
+            "usgs_seismic_30d": usgs_data,
+            "nasa_active_hazards": eonet_data,
+            "digital_infrastructure": {
+                "peeringdb": peering_data,
+                "subsea_cables": subsea_data,
+            },
             "seismic": seismic,
             "climate": climate,
         },
@@ -461,6 +520,10 @@ async def _run_infrastructure_assessment(
             "terrain": elev_data["source"],
             "weather": weather_data["source"],
             "hydrology_flood": flood_data["source"],
+            "usgs_seismic_30d": usgs_data["source"],
+            "nasa_active_hazards": eonet_data["source"],
+            "peeringdb_dc_ixp": peering_data["source"],
+            "telegeography_subsea": subsea_data["source"],
             "connectivity": "ORBITAL_SHELL_PHYSICS_AND_DEM_HORIZON",
             "seismic": f"LIVE_CLOUD_RUN_SUBORACLE ({seismic['status']})",
             "climate": f"LIVE_CLOUD_RUN_SUBORACLE ({climate['status']})",
