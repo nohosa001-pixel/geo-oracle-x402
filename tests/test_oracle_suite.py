@@ -73,9 +73,18 @@ async def test_system_sync_daemon_telemetry():
         assert r_status.status_code == 200
         status_data = r_status.json()
         assert status_data["daemon_status"] == "ONLINE_ACTIVE"
-        assert "weather_noaa_gfs" in status_data["feeds"]
-        assert "airspace_notams" in status_data["feeds"]
+        assert "weather_open_meteo" in status_data["feeds"]
         assert "satcom_rf_mesh" in status_data["feeds"]
+        assert "earth_infrastructure_registry" in status_data["feeds"]
+
+        r_assets = await client.get("/v1/infrastructure/assets?asset_type=DATA_CENTER")
+        assert r_assets.status_code == 200
+        assert r_assets.json()["count"] >= 4
+
+        r_reg_preview = await client.post("/v1/infrastructure/preview", json={"asset_id": "DC-FRANKFURT-DE", "use_live_feed": False})
+        assert r_reg_preview.status_code == 200
+        assert r_reg_preview.json()["asset"]["asset_type"] == "DATA_CENTER"
+        assert "flood_elevation_risk" in r_reg_preview.json()["summary"]
 
         r_trigger = await client.post("/v1/system/trigger-sync")
         assert r_trigger.status_code == 200
@@ -164,7 +173,7 @@ async def test_infrastructure_catalog_and_free_preview():
             )
             assert r_prev.status_code == 200
             prev = r_prev.json()
-            assert prev["schema_version"] == "earth-infra-risk/1.0"
+            assert prev["schema_version"] == "earth-infra-risk/1.1"
             assert prev["mode"] == "FREE_PREVIEW"
             assert prev["settlement"]["fee_paid_usdc"] == 0.0
             assert "terrain" in prev["layers"]

@@ -1,9 +1,8 @@
 """
 A.GRID Earth Physical Infrastructure Risk Hub Router (x402).
-Synthesizes local WGS84 Terrain, Micro-Weather, and 5G/Starlink RF Connectivity
-with live Cloud Run Seismic (global-earthquake-agent) and Climate (climate-insurance-agent)
-sub-oracles for global physical infrastructure assets (DATA_CENTER, PORT, MINE, POWER_GRID,
-SUBSEA_CABLE, FARM, LOGISTICS_HUB).
+Synthesizes live Open-Meteo Copernicus DEM Elevation, live Open-Meteo Site Weather,
+5G/Starlink RF Connectivity, Global Critical Asset Registry, and live Cloud Run
+Seismic (global-earthquake-agent) & Climate (climate-insurance-agent) sub-oracles.
 """
 
 from __future__ import annotations
@@ -16,18 +15,18 @@ import time
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Header, status
+from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.core.base_schemas import X402PaymentRequirement
+from app.core.live_earth_feeds import fetch_live_elevation, fetch_live_weather
 from app.core.x402_verifier import X402Verifier
+from app.oracles.infrastructure.registry import get_asset_by_id, list_assets
 from app.oracles.rf_coverage.engine import RFEngine
 from app.oracles.rf_coverage.schemas import RFQueryInput
 from app.oracles.terrain.engine import TerrainEngine
 from app.oracles.terrain.schemas import GeoCoordinateInput
-from app.oracles.weather.engine import WeatherEngine
-from app.oracles.weather.schemas import WeatherQueryInput
 
 router = APIRouter(prefix="/v1/infrastructure", tags=["0. Earth Physical Infrastructure Hub"])
 
@@ -67,26 +66,43 @@ _ASSET_WEIGHTS: Dict[str, Dict[str, float]] = {
 
 
 class InfrastructureAssessRequest(BaseModel):
-    asset_id: str = Field(..., description="Unique asset identifier (e.g., DC-SEOUL-01, PORT-ROTTERDAM, MINE-CL-ATACAMA)")
-    asset_type: AssetType = Field(default="DATA_CENTER", description="Physical infrastructure asset class")
-    latitude: float = Field(..., ge=-90.0, le=90.0, description="WGS84 Latitude")
-    longitude: float = Field(..., ge=-180.0, le=180.0, description="WGS84 Longitude")
-    commodity: Optional[str] = Field(default="INFRASTRUCTURE", description="Optional commodity or workload tag (e.g. AI_COMPUTE, LITHIUM, SOYBEAN)")
-    use_live_feed: bool = Field(default=True, description="Query live Cloud Run seismic & climate sub-oracles")
+    asset_id: str = Field(..., description="Asset ID (e.g. DC-TOKYO-JP from /v1/infrastructure/assets, or custom ID)")
+    asset_type: Optional[AssetType] = Field(default=None, description="Physical infrastructure asset class")
+    latitude: Optional[float] = Field(default=None, ge=-90.0, le=90.0, description="WGS84 Latitude (optional if asset_id is registered)")
+    longitude: Optional[float] = Field(default=None, ge=-180.0, le=180.0, description="WGS84 Longitude (optional if asset_id is registered)")
+    commodity: Optional[str] = Field(default=None, description="Optional commodity or workload tag (e.g. AI_COMPUTE, LITHIUM, SOYBEAN)")
+    use_live_feed: bool = Field(default=True, description="Query live Open-Meteo, seismic & climate sub-oracles")
 
 
-async def _query_seismic_suboracle(req: InfrastructureAssessRequest) -> Dict[str, Any]:
+def _resolve_asset_coordinates(req: InfrastructureAssessRequest) -> tuple[float, float, str, str, Optional[str]]:
+    registered = get_asset_by_id(req.asset_id)
+    lat = req.latitude if req.latitude is not None else (registered["latitude"] if registered else None)
+    lon = req.longitude if req.longitude is not None else (registered["longitude"] if registered else None)
+    if lat is None or lon is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"latitude and longitude are required for unregistered asset_id '{req.asset_id}'.",
+        )
+    asset_type = req.asset_type or (registered["asset_type"] if registered else "DATA_CENTER")
+    commodity = req.commodity or (registered["commodity"] if registered else "INFRASTRUCTURE")
+    asset_name = registered["name"] if registered else None
+    return float(lat), float(lon), asset_type, commodity, asset_name
+
+
+async def _query_seismic_suboracle(
+    asset_id: str, lat: float, lon: float, asset_type: str, commodity: str, use_live_feed: bool
+) -> Dict[str, Any]:
     payload = {
         "waypoints": [
             {
-                "asset_id": req.asset_id,
-                "lat": req.latitude,
-                "lng": req.longitude,
-                "asset_type": req.asset_type,
-                "commodity": req.commodity or "INFRASTRUCTURE",
+                "asset_id": asset_id,
+                "lat": lat,
+                "lng": lon,
+                "asset_type": asset_type,
+                "commodity": commodity,
             }
         ],
-        "use_live_feed": req.use_live_feed,
+        "use_live_feed": use_live_feed,
     }
     try:
         async with httpx.AsyncClient(timeout=SUBORACLE_TIMEOUT_SEC) as client:
@@ -112,18 +128,20 @@ async def _query_seismic_suboracle(req: InfrastructureAssessRequest) -> Dict[str
         }
 
 
-async def _query_climate_suboracle(req: InfrastructureAssessRequest) -> Dict[str, Any]:
+async def _query_climate_suboracle(
+    asset_id: str, lat: float, lon: float, asset_type: str, commodity: str, use_live_feed: bool
+) -> Dict[str, Any]:
     payload = {
         "waypoints": [
             {
-                "asset_id": req.asset_id,
-                "lat": req.latitude,
-                "lng": req.longitude,
-                "asset_type": req.asset_type,
-                "commodity": req.commodity or "INFRASTRUCTURE",
+                "asset_id": asset_id,
+                "lat": lat,
+                "lng": lon,
+                "asset_type": asset_type,
+                "commodity": commodity,
             }
         ],
-        "use_live_feed": req.use_live_feed,
+        "use_live_feed": use_live_feed,
     }
     try:
         async with httpx.AsyncClient(timeout=SUBORACLE_TIMEOUT_SEC) as client:
@@ -147,6 +165,43 @@ async def _query_climate_suboracle(req: InfrastructureAssessRequest) -> Dict[str
         }
 
 
+def _classify_site_indicators(
+    elevation_m: float, temp_c: float, wind_mps: float, asset_type: str
+) -> tuple[str, str, str, float]:
+    """Computes infrastructure-specific operational stress indicators and bonus risk penalty."""
+    if elevation_m < 5.0 and asset_type != "SUBSEA_CABLE":
+        flood_risk = "HIGH"
+        flood_penalty = 12.0
+    elif elevation_m < 15.0 and asset_type != "SUBSEA_CABLE":
+        flood_risk = "MODERATE"
+        flood_penalty = 5.0
+    else:
+        flood_risk = "LOW"
+        flood_penalty = 0.0
+
+    if temp_c >= 35.0:
+        cooling_stress = "HIGH"
+        cooling_penalty = 12.0 if asset_type in ("DATA_CENTER", "POWER_GRID") else 5.0
+    elif temp_c >= 28.0:
+        cooling_stress = "MODERATE"
+        cooling_penalty = 4.0 if asset_type in ("DATA_CENTER", "POWER_GRID") else 1.5
+    else:
+        cooling_stress = "LOW"
+        cooling_penalty = 0.0
+
+    if wind_mps >= 20.0:
+        wind_hazard = "HIGH"
+        wind_penalty = 10.0 if asset_type in ("PORT", "POWER_GRID", "LOGISTICS_HUB") else 3.0
+    elif wind_mps >= 12.0:
+        wind_hazard = "MODERATE"
+        wind_penalty = 4.0 if asset_type in ("PORT", "POWER_GRID") else 1.0
+    else:
+        wind_hazard = "LOW"
+        wind_penalty = 0.0
+
+    return flood_risk, cooling_stress, wind_hazard, (flood_penalty + cooling_penalty + wind_penalty)
+
+
 async def _run_infrastructure_assessment(
     req: InfrastructureAssessRequest,
     fee_paid: float,
@@ -154,32 +209,52 @@ async def _run_infrastructure_assessment(
     preview: bool = False,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
+    lat, lon, asset_type, commodity, asset_name = _resolve_asset_coordinates(req)
 
-    # 1. Local deterministic Earth physics layers (terrain, micro-weather, 5G/Starlink connectivity)
+    # 1. Local deterministic slope/RF layers
     terrain = TerrainEngine.analyze(
-        input_data=GeoCoordinateInput(latitude=req.latitude, longitude=req.longitude, agent_id=req.asset_id),
-        fee_paid=0.0,
-        settlement_network=settlement_network,
-    )
-    weather = WeatherEngine.analyze(
-        WeatherQueryInput(latitude=req.latitude, longitude=req.longitude, altitude_agl_meters=10.0),
+        input_data=GeoCoordinateInput(latitude=lat, longitude=lon, agent_id=req.asset_id),
         fee_paid=0.0,
         settlement_network=settlement_network,
     )
     rf = RFEngine.analyze(
-        RFQueryInput(latitude=req.latitude, longitude=req.longitude, altitude_agl_meters=15.0),
+        RFQueryInput(latitude=lat, longitude=lon, altitude_agl_meters=15.0),
         fee_paid=0.0,
         settlement_network=settlement_network,
     )
 
-    # 2. Parallel live Cloud Run sub-oracle calls (seismic + climate) with graceful fallback
-    seismic, climate = await asyncio.gather(
-        _query_seismic_suboracle(req),
-        _query_climate_suboracle(req),
+    # 2. Concurrent live Earth telemetry (Open-Meteo DEM + Weather + Cloud Run Seismic + Climate)
+    if req.use_live_feed:
+        elev_data, weather_data, seismic, climate = await asyncio.gather(
+            fetch_live_elevation(lat, lon),
+            fetch_live_weather(lat, lon),
+            _query_seismic_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
+            _query_climate_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
+        )
+    else:
+        elev_data = {"elevation_meters": round(terrain.elevation_meters, 1), "source": "DETERMINISTIC_FALLBACK"}
+        weather_data = {
+            "temperature_celsius": 18.0,
+            "humidity_pct": 55.0,
+            "surface_pressure_hpa": 1013.25,
+            "wind_speed_mps": 4.0,
+            "wind_direction_deg": 180.0,
+            "precipitation_mm": 0.0,
+            "source": "DETERMINISTIC_FALLBACK",
+        }
+        seismic = {"status": "DEGRADED_FALLBACK", "action": "CLEAR", "severity": 0.0, "force_majeure": False, "alternate_hubs": [], "url": SEISMIC_ORACLE_URL}
+        climate = {"status": "DEGRADED_FALLBACK", "action": "CLEAR", "severity": 0.0, "force_majeure": False, "url": CLIMATE_ORACLE_URL}
+
+    elevation_m = float(elev_data["elevation_meters"])
+    temp_c = float(weather_data["temperature_celsius"])
+    wind_mps = float(weather_data["wind_speed_mps"])
+
+    flood_risk, cooling_stress, wind_hazard, site_penalty = _classify_site_indicators(
+        elevation_m, temp_c, wind_mps, asset_type
     )
 
     # 3. Synthesize Earth Infrastructure Risk Score (0-100)
-    weights = _ASSET_WEIGHTS.get(req.asset_type, _ASSET_WEIGHTS["DATA_CENTER"])
+    weights = _ASSET_WEIGHTS.get(asset_type, _ASSET_WEIGHTS["DATA_CENTER"])
     starlink_los = float(rf.satellite.leo_starlink_los_pct)
     connectivity_risk = max(0.0, min(100.0, 100.0 - starlink_los))
 
@@ -188,7 +263,8 @@ async def _run_infrastructure_assessment(
             100.0,
             seismic["severity"] * weights["seismic"]
             + climate["severity"] * weights["climate"]
-            + connectivity_risk * weights["connectivity"],
+            + connectivity_risk * weights["connectivity"]
+            + site_penalty,
         ),
         2,
     )
@@ -215,6 +291,10 @@ async def _run_infrastructure_assessment(
         bcbs_flags.append("ELEVATED_SEISMIC_CORRELATED_RISK")
     if climate["severity"] >= 40.0:
         bcbs_flags.append("EXTREME_CLIMATE_OPERATIONAL_RISK")
+    if flood_risk == "HIGH":
+        bcbs_flags.append("LOW_ELEVATION_FLOOD_EXPOSURE")
+    if cooling_stress == "HIGH":
+        bcbs_flags.append("THERMAL_COOLING_STRESS")
     if starlink_los >= 70.0:
         bcbs_flags.append("SATCOM_REDUNDANCY_AVAILABLE")
     else:
@@ -227,9 +307,9 @@ async def _run_infrastructure_assessment(
     proof_payload = json.dumps(
         {
             "asset_id": req.asset_id,
-            "asset_type": req.asset_type,
-            "lat": req.latitude,
-            "lng": req.longitude,
+            "asset_type": asset_type,
+            "lat": lat,
+            "lng": lon,
             "combined_score": combined_score,
             "risk_grade": risk_grade,
         },
@@ -238,35 +318,42 @@ async def _run_infrastructure_assessment(
     proof_hash = "0x" + hashlib.sha256(proof_payload.encode("utf-8")).hexdigest()
 
     return {
-        "schema_version": "earth-infra-risk/1.0",
+        "schema_version": "earth-infra-risk/1.1",
         "mode": "FREE_PREVIEW" if preview else "VERIFIED_PAID",
         "asset": {
             "asset_id": req.asset_id,
-            "asset_type": req.asset_type,
-            "latitude": req.latitude,
-            "longitude": req.longitude,
-            "commodity": req.commodity,
+            "name": asset_name,
+            "asset_type": asset_type,
+            "latitude": lat,
+            "longitude": lon,
+            "commodity": commodity,
         },
         "summary": {
             "combined_risk_score": combined_score,
             "risk_grade": risk_grade,
             "recommended_action": recommended_action,
             "settlement_cleared": settlement_cleared,
+            "flood_elevation_risk": flood_risk,
+            "cooling_heat_stress": cooling_stress,
+            "wind_hazard_level": wind_hazard,
             "bcbs_resilience_flags": bcbs_flags,
             "latency_ms": latency_ms,
         },
         "layers": {
             "terrain": {
-                "elevation_meters": terrain.elevation_meters,
+                "elevation_meters": elevation_m,
                 "slope_degrees": terrain.slope_gradient_degrees,
                 "terrain_classification": terrain.terrain_classification,
-                "surface_status": terrain.trafficability.overall_status,
+                "data_source": elev_data["source"],
             },
             "weather": {
-                "temperature_celsius": weather.atmosphere.temperature_celsius,
-                "humidity_pct": weather.atmosphere.relative_humidity_pct,
-                "wind_speed_mps": weather.wind_vector.horizontal_speed_mps,
-                "icing_risk_index": weather.atmosphere.icing_risk_index,
+                "temperature_celsius": temp_c,
+                "humidity_pct": weather_data["humidity_pct"],
+                "surface_pressure_hpa": weather_data["surface_pressure_hpa"],
+                "wind_speed_mps": wind_mps,
+                "wind_direction_deg": weather_data["wind_direction_deg"],
+                "precipitation_mm": weather_data["precipitation_mm"],
+                "data_source": weather_data["source"],
             },
             "connectivity": {
                 "cellular_tech": rf.cellular.carrier_technology,
@@ -290,17 +377,30 @@ async def get_infrastructure_catalog():
     """Free catalog of supported Earth Physical Infrastructure asset classes and live sub-oracles."""
     return {
         "hub": "A.GRID Earth Physical Infrastructure Risk Hub (geo-oracle-x402)",
-        "schema_version": "earth-infra-risk/1.0",
+        "schema_version": "earth-infra-risk/1.1",
         "supported_asset_types": list(_ASSET_WEIGHTS.keys()),
+        "registered_assets_count": len(list_assets()),
         "sub_oracles": {
             "seismic": SEISMIC_ORACLE_URL,
             "climate": CLIMATE_ORACLE_URL,
         },
         "endpoints": {
+            "asset_registry": "GET /v1/infrastructure/assets",
             "free_preview": "POST /v1/infrastructure/preview",
             "paid_x402_assess": "POST /v1/infrastructure/assess",
             "x402_challenge": "GET /v1/infrastructure/challenge",
         },
+    }
+
+
+@router.get("/assets")
+async def get_registered_infrastructure_assets(asset_type: Optional[str] = None):
+    """Free Global Critical Infrastructure Asset Registry (Data Centers, Ports, Mines, Subsea Cables, Farms)."""
+    assets = list_assets(asset_type=asset_type)
+    return {
+        "count": len(assets),
+        "filter_asset_type": asset_type.upper() if asset_type else None,
+        "assets": assets,
     }
 
 
