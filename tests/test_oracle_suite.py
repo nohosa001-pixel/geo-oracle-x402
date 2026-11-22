@@ -173,7 +173,10 @@ async def test_infrastructure_catalog_and_free_preview():
             )
             assert r_prev.status_code == 200
             prev = r_prev.json()
-            assert prev["schema_version"] == "earth-infra-risk/1.1"
+            assert prev["schema_version"] == "earth-infra-risk/1.2"
+            assert "hydrology_flood" in prev["layers"]
+            assert "wet_bulb_celsius" in prev["layers"]["weather"]
+            assert "data_provenance" in prev
             assert prev["mode"] == "FREE_PREVIEW"
             assert prev["settlement"]["fee_paid_usdc"] == 0.0
             assert "terrain" in prev["layers"]
@@ -321,3 +324,35 @@ def test_in_memory_nonce_store_lifecycle():
     store.consume("x402_test_nonce")
     assert store.get_active("x402_test_nonce") is None
     assert store.is_consumed("x402_test_nonce")
+
+
+def test_live_earth_feeds_scientific_primitives():
+    from app.core.live_earth_feeds import _compute_dem_derivatives, compute_wet_bulb_celsius
+
+    # Stull Wet-Bulb: 30 C at 80% RH should be ~27.1 C (critical cooling stress threshold)
+    wb = compute_wet_bulb_celsius(30.0, 80.0)
+    assert 26.5 <= wb <= 27.8
+
+    # 5-point DEM finite-difference slope: East is +18m higher than West over 180m span -> atan(0.1) ~= 5.71 deg
+    deriv = _compute_dem_derivatives(z_c=30.0, z_n=30.0, z_s=30.0, z_e=39.0, z_w=21.0, radius_m=90.0)
+    assert deriv["elevation_meters"] == 30.0
+    assert 5.6 <= deriv["slope_degrees"] <= 5.8
+    assert deriv["horizon_mask_deg"] >= 5.6
+
+
+def test_site_indicators_wet_bulb_and_glofas_flood():
+    from app.oracles.infrastructure.router import _classify_site_indicators
+
+    # High GloFAS river flood surge triggers HIGH flood risk even at 50m elevation
+    flood, cooling, _, penalty = _classify_site_indicators(
+        elevation_m=50.0,
+        temp_c=31.0,
+        wind_mps=5.0,
+        asset_type="DATA_CENTER",
+        wet_bulb_c=28.5,
+        river_discharge_3d_max_m3s=850.0,
+        flood_surge_ratio=2.8,
+    )
+    assert flood == "HIGH"
+    assert cooling == "HIGH"
+    assert penalty == 24.0

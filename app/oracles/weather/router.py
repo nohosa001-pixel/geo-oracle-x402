@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, status
 from fastapi.responses import JSONResponse
 from app.core.x402_verifier import X402Verifier
 from app.core.base_schemas import X402PaymentRequirement
+from app.core.live_earth_feeds import fetch_live_weather
 from app.oracles.weather.schemas import WeatherQueryInput, MicroWeatherOutput
 from app.oracles.weather.engine import WeatherEngine
 
@@ -83,10 +84,12 @@ async def analyze_weather(
     elif settlement and settlement.get("network") == "Solana":
         settlement_net_display = f"Solana (Cluster {settlement.get('cluster', 'mainnet-beta')})"
 
+    live_weather = await fetch_live_weather(body.latitude, body.longitude)
     output = WeatherEngine.analyze(
         body,
         fee_paid=float(ORACLE_PRICE_USDC),
         settlement_network=settlement_net_display,
+        live_weather=live_weather,
     )
     return JSONResponse(
         status_code=status.HTTP_200_OK,

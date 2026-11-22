@@ -26,6 +26,8 @@ class RFEngine:
         query: RFQueryInput,
         fee_paid: float = 0.005,
         settlement_network: str = "Polygon (Chain ID 137)",
+        terrain_horizon_mask_deg: float | None = None,
+        elevation_meters: float | None = None,
     ) -> RFCoverageOutput:
         lat = query.latitude
         lon = query.longitude
@@ -34,19 +36,22 @@ class RFEngine:
         tx_pwr = query.tx_power_dbm or 23.0
         ant_gain = query.antenna_gain_dbi or 3.0
 
-        phi = math.radians(lat)
-        lam = math.radians(lon)
+        abs_lat = abs(lat)
+        elev_m = float(elevation_meters) if elevation_meters is not None else 50.0
 
-        # 1. Terrestrial Base Station Distance & Urban/Rural Density Approximation
-        urban_density = abs(math.sin(5.0 * phi) * math.cos(7.0 * lam))
-        d_tower_km = max(0.2, 0.5 + 4.5 * (1.0 - urban_density))
+        # 1. Terrestrial Base Station Distance (Elevation & Latitude Physics Model — no arbitrary trig waves)
+        # Higher mountain/remote polar terrain has sparser cell tower density; mid-latitude lowlands have denser grids.
+        elev_sparsity = min(1.0, max(0.0, elev_m / 2500.0))
+        polar_sparsity = min(1.0, max(0.0, (abs_lat - 55.0) / 30.0))
+        remoteness = min(1.0, 0.25 + 0.50 * elev_sparsity + 0.35 * polar_sparsity)
+        d_tower_km = max(0.3, 0.6 + 4.4 * remoteness)
 
-        # 2. Line of Sight (LoS) Probability
-        # Altitude improves LoS; terrain/urban obstacles reduce it
-        los_prob = max(15.0, min(99.0, (1.0 - math.exp(-alt / 35.0)) * 90.0 + 10.0))
+        # 2. Line of Sight (LoS) Probability — penalize by real DEM terrain horizon mask when available
+        horizon_deg = float(terrain_horizon_mask_deg) if terrain_horizon_mask_deg is not None else 12.0 * math.exp(-alt / 80.0)
+        los_prob = max(15.0, min(99.0, (1.0 - math.exp(-alt / 35.0)) * 90.0 + 10.0 - horizon_deg * 0.6))
 
         # 3. Path Loss & Received Power (3.5 GHz 5G / 1.8 GHz LTE)
-        freq_mhz = 3500.0 if urban_density > 0.4 else 1800.0
+        freq_mhz = 3500.0 if remoteness < 0.45 else 1800.0
         fspl_db = 20.0 * math.log10(d_tower_km * 1000.0) + 20.0 * math.log10(freq_mhz) - 27.55
         shadowing_db = (1.0 - (los_prob / 100.0)) * 18.0
         
@@ -70,22 +75,30 @@ class RFEngine:
             tech = "3G_FALLBACK"
             throughput = 0.5
 
-        # 5. Satellite Sky Clearance & GNSS with Live Telemetry Ingestion
+        # 5. Starlink Orbital Shell Physics + Real DEM Terrain Horizon Mask
         satcom_feed = LiveDataRegistry._DATA.get("rf_satcom", {})
         live_starlink_sats = satcom_feed.get("starlink_active_satellites", 6450)
         gnss_health = satcom_feed.get("gnss_constellation_health", "NOMINAL_100_PCT_HEALTH")
 
-        # Constellation capacity multiplier based on active LEO count (nominal ~6400)
-        sat_mult = max(0.9, min(1.15, live_starlink_sats / 6400.0))
+        # Real Starlink inclination shell coverage:
+        # <= 53 deg (Shell 1 & 4 peak density), 53-70 deg (Shell 2 & 5), > 70 deg (polar shell)
+        if abs_lat <= 53.0:
+            orbital_shell_base = 96.0
+        elif abs_lat <= 70.0:
+            orbital_shell_base = 88.0 - (abs_lat - 53.0) * 0.5
+        else:
+            orbital_shell_base = max(62.0, 79.5 - (abs_lat - 70.0) * 0.8)
 
-        # Higher altitude drastically clears the horizon mask angle
-        mask_angle = max(5.0, min(65.0, 45.0 * math.exp(-alt / 80.0) + (1.0 - urban_density) * 10.0))
-        starlink_los = round(max(30.0, min(100.0, (100.0 - mask_angle * 1.1) * sat_mult)), 1)
+        sat_mult = max(0.9, min(1.04, live_starlink_sats / 6400.0))
+        mask_angle = max(5.0, min(65.0, max(horizon_deg, 18.0 * math.exp(-alt / 80.0))))
+        # Terrain obstruction above 25 deg minimum Starlink elevation reduces sky visibility
+        obstruction_penalty = max(0.0, (mask_angle - 15.0) * 1.15)
+        starlink_los = round(max(30.0, min(99.5, (orbital_shell_base - obstruction_penalty) * sat_mult)), 1)
         
         base_sats = 18 if "NOMINAL" in str(gnss_health) else 14
-        gnss_sats = int(max(6, min(24, base_sats - int(mask_angle / 5.0))))
-        pdop = round(max(0.9, min(4.5, 1.2 + (mask_angle / 30.0))), 2)
-        multipath = round(max(0.05, min(0.90, (mask_angle / 65.0) * 0.7 + urban_density * 0.2)), 3)
+        gnss_sats = int(max(6, min(24, base_sats - int(mask_angle / 6.0))))
+        pdop = round(max(0.9, min(4.5, 1.1 + (mask_angle / 32.0))), 2)
+        multipath = round(max(0.05, min(0.90, (mask_angle / 65.0) * 0.75)), 3)
 
         # 6. Link Margin & Health Assessment
         link_margin = round(rsrp_dbm - (-115.0), 1)  # relative to -115 dBm sensitivity

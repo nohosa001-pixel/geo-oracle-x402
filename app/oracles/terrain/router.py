@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, status
 from fastapi.responses import JSONResponse
 from app.core.x402_verifier import X402Verifier
 from app.core.base_schemas import X402PaymentRequirement
+from app.core.live_earth_feeds import fetch_live_dem_patch
 from app.oracles.terrain.schemas import GeoCoordinateInput, TerrainPhysicsOutput
 from app.oracles.terrain.engine import TerrainEngine
 
@@ -83,10 +84,16 @@ async def analyze_terrain(
     elif settlement and settlement.get("network") == "Solana":
         settlement_net_display = f"Solana (Cluster {settlement.get('cluster', 'mainnet-beta')})"
 
+    live_dem = await fetch_live_dem_patch(
+        body.latitude,
+        body.longitude,
+        radius_m=max(30.0, body.sampling_radius_meters or 90.0),
+    )
     output = TerrainEngine.analyze(
         input_data=body,
         fee_paid=float(ORACLE_PRICE_USDC),
         settlement_network=settlement_net_display,
+        live_dem=live_dem,
     )
     return JSONResponse(
         status_code=status.HTTP_200_OK,

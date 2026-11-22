@@ -136,13 +136,25 @@ class TerrainEngine:
         input_data: GeoCoordinateInput,
         fee_paid: float = 0.005,
         settlement_network: str = "Polygon (Chain ID 137)",
+        live_dem: dict | None = None,
     ) -> TerrainPhysicsOutput:
         lat = input_data.latitude
         lon = input_data.longitude
         rad = input_data.sampling_radius_meters or 30.0
 
-        elev, slope_deg, slope_pct, aspect_deg, compass = cls.compute_gradient_and_aspect(lat, lon, rad)
-        roughness = round(abs(math.sin(lat * 13.0) * math.cos(lon * 17.0) * 0.7) + (slope_deg / 90.0) * 0.3, 3)
+        if live_dem and live_dem.get("slope_degrees") is not None:
+            elev = float(live_dem["elevation_meters"])
+            slope_deg = float(live_dem["slope_degrees"])
+            slope_pct = float(live_dem["slope_percentage"])
+            aspect_deg = float(live_dem["aspect_degrees"])
+            idx = int((aspect_deg + 11.25) / 22.5) % 16
+            compass = cls.COMPASS_SECTORS[idx]
+        else:
+            elev, slope_deg, slope_pct, aspect_deg, compass = cls.compute_gradient_and_aspect(lat, lon, rad)
+            if live_dem and live_dem.get("elevation_meters") is not None:
+                elev = float(live_dem["elevation_meters"])
+
+        roughness = round(min(1.0, 0.12 + (slope_deg / 60.0) * 0.65), 3)
         
         solar = cls.compute_solar_exposure(lat, slope_deg, aspect_deg)
         trafficability = cls.evaluate_trafficability(slope_deg, roughness)

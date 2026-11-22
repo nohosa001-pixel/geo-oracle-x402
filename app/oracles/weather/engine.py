@@ -29,6 +29,7 @@ class WeatherEngine:
         query: WeatherQueryInput,
         fee_paid: float = 0.005,
         settlement_network: str = "Polygon (Chain ID 137)",
+        live_weather: dict | None = None,
     ) -> MicroWeatherOutput:
         lat = query.latitude
         lon = query.longitude
@@ -39,25 +40,22 @@ class WeatherEngine:
         phi = math.radians(lat)
         lam = math.radians(lon)
 
-        # 1. Base Sea-Level Surface State with Live Ingestion Integration
-        weather_feed = LiveDataRegistry._DATA.get("weather", {})
-        pressure_anomaly = float(weather_feed.get("global_pressure_anomaly_hpa", 0.0))
-        regional_mods = weather_feed.get("regional_wind_modifiers", {})
+        # 1. Base Sea-Level Surface State — anchor to live Open-Meteo observation when available
+        if live_weather and live_weather.get("source") == "LIVE_OPEN_METEO":
+            t_base_c = float(live_weather["temperature_celsius"])
+            p_base_hpa = float(live_weather["surface_pressure_hpa"])
+            rh_base_pct = float(live_weather["humidity_pct"])
+            ref_speed = max(0.5, float(live_weather["wind_speed_mps"]))
+            wind_dir = float(live_weather["wind_direction_deg"]) % 360.0
+        else:
+            weather_feed = LiveDataRegistry._DATA.get("weather", {})
+            pressure_anomaly = float(weather_feed.get("global_pressure_anomaly_hpa", 0.0))
 
-        reg_key = None
-        if -20.0 <= lon <= 45.0 and 30.0 <= lat <= 70.0:
-            reg_key = "EUROPE_CENTRAL"
-        elif -170.0 <= lon <= -50.0 and 20.0 <= lat <= 75.0:
-            reg_key = "AMERICA_NORTH"
-        elif 70.0 <= lon <= 150.0 and 15.0 <= lat <= 60.0:
-            reg_key = "ASIA_EAST"
-
-        gust_factor_mod = regional_mods.get(reg_key, {}).get("gust_factor", 1.0) if reg_key else 1.0
-        u_offset_mod = regional_mods.get(reg_key, {}).get("u_offset", 0.0) if reg_key else 0.0
-
-        t_base_c = 15.0 - 0.45 * abs(lat) + 8.0 * math.sin(3.0 * lam + 1.2) * math.cos(2.0 * phi)
-        p_base_hpa = 1013.25 + 18.0 * math.cos(5.0 * phi) * math.sin(4.0 * lam) + pressure_anomaly
-        rh_base_pct = max(20.0, min(95.0, 55.0 + 30.0 * math.sin(7.0 * phi) * math.cos(5.0 * lam)))
+            t_base_c = 15.0 - 0.45 * abs(lat) + 8.0 * math.sin(3.0 * lam + 1.2) * math.cos(2.0 * phi)
+            p_base_hpa = 1013.25 + 18.0 * math.cos(5.0 * phi) * math.sin(4.0 * lam) + pressure_anomaly
+            rh_base_pct = max(20.0, min(95.0, 55.0 + 30.0 * math.sin(7.0 * phi) * math.cos(5.0 * lam)))
+            ref_speed = 4.5 + 4.0 * abs(math.sin(4.0 * phi + 0.8)) + 3.0 * abs(math.cos(6.0 * lam))
+            wind_dir = (210.0 + 90.0 * math.sin(2.0 * phi) + 45.0 * math.cos(3.0 * lam)) % 360.0
 
         # 2. Atmospheric Barometric Lapse
         lapse_rate = 0.0065  # 6.5 C per 1000m
@@ -71,13 +69,11 @@ class WeatherEngine:
 
         # 3. 3D Wind Vector Simulation using Boundary Layer Log-Profile
         z0 = 0.05  # aerodynamic roughness
-        ref_speed = 4.5 + 4.0 * abs(math.sin(4.0 * phi + 0.8)) + 3.0 * abs(math.cos(6.0 * lam))
         
         # Logarithmic vertical wind shear profile
         alt_factor = math.log(max(1.0, alt) / z0) / math.log(10.0 / z0)
         horiz_speed = max(0.5, ref_speed * alt_factor)
         
-        wind_dir = (210.0 + 90.0 * math.sin(2.0 * phi) + 45.0 * math.cos(3.0 * lam)) % 360.0
         wind_rad = math.radians(wind_dir)
         
         # Meteorological convention: wind from direction

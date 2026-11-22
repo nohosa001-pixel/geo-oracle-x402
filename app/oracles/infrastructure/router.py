@@ -20,7 +20,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.core.base_schemas import X402PaymentRequirement
-from app.core.live_earth_feeds import fetch_live_elevation, fetch_live_weather
+from app.core.live_earth_feeds import (
+    compute_wet_bulb_celsius,
+    fetch_live_elevation,
+    fetch_live_flood,
+    fetch_live_weather,
+)
 from app.core.observability import log_event
 from app.core.x402_verifier import X402Verifier
 from app.oracles.infrastructure.registry import get_asset_by_id, list_assets
@@ -183,23 +188,39 @@ async def _query_climate_suboracle(
 
 
 def _classify_site_indicators(
-    elevation_m: float, temp_c: float, wind_mps: float, asset_type: str
+    elevation_m: float,
+    temp_c: float,
+    wind_mps: float,
+    asset_type: str,
+    precipitation_mm: float = 0.0,
+    wet_bulb_c: Optional[float] = None,
+    river_discharge_3d_max_m3s: float = 0.0,
+    flood_surge_ratio: float = 1.0,
 ) -> tuple[str, str, str, float]:
-    """Computes infrastructure-specific operational stress indicators and bonus risk penalty."""
-    if elevation_m < 5.0 and asset_type != "SUBSEA_CABLE":
+    """
+    Computes infrastructure-specific operational stress indicators and bonus risk penalty
+    incorporating real Copernicus DEM elevation, Open-Meteo rainfall, Stull Wet-Bulb Temp,
+    and ECMWF GloFAS river flood surge forecasts.
+    """
+    heavy_rain = precipitation_mm >= 15.0
+    glofas_flood_surge = river_discharge_3d_max_m3s >= 500.0 and flood_surge_ratio >= 2.0
+
+    if asset_type != "SUBSEA_CABLE" and (elevation_m < 5.0 or glofas_flood_surge or (elevation_m < 15.0 and heavy_rain)):
         flood_risk = "HIGH"
         flood_penalty = 12.0
-    elif elevation_m < 15.0 and asset_type != "SUBSEA_CABLE":
+    elif asset_type != "SUBSEA_CABLE" and (elevation_m < 15.0 or precipitation_mm >= 5.0 or flood_surge_ratio >= 2.5):
         flood_risk = "MODERATE"
         flood_penalty = 5.0
     else:
         flood_risk = "LOW"
         flood_penalty = 0.0
 
-    if temp_c >= 35.0:
+    # Data Center evaporative cooling efficiency degrades sharply above Wet-Bulb 26-28 C
+    wb = wet_bulb_c if wet_bulb_c is not None else (temp_c - 6.0)
+    if temp_c >= 35.0 or wb >= 28.0:
         cooling_stress = "HIGH"
         cooling_penalty = 12.0 if asset_type in ("DATA_CENTER", "POWER_GRID") else 5.0
-    elif temp_c >= 28.0:
+    elif temp_c >= 28.0 or wb >= 24.0:
         cooling_stress = "MODERATE"
         cooling_penalty = 4.0 if asset_type in ("DATA_CENTER", "POWER_GRID") else 1.5
     else:
@@ -228,35 +249,36 @@ async def _run_infrastructure_assessment(
     t0 = time.perf_counter()
     lat, lon, asset_type, commodity, asset_name = _resolve_asset_coordinates(req)
 
-    # 1. Local deterministic slope/RF layers
-    terrain = TerrainEngine.analyze(
-        input_data=GeoCoordinateInput(latitude=lat, longitude=lon, agent_id=req.asset_id),
-        fee_paid=0.0,
-        settlement_network=settlement_network,
-    )
-    rf = RFEngine.analyze(
-        RFQueryInput(latitude=lat, longitude=lon, altitude_agl_meters=15.0),
-        fee_paid=0.0,
-        settlement_network=settlement_network,
-    )
-
-    # 2. Concurrent live Earth telemetry (Open-Meteo DEM + Weather + Cloud Run Seismic + Climate)
+    # 1. Concurrent live Earth telemetry (Copernicus 5-pt DEM + Open-Meteo Weather + ECMWF GloFAS Flood + Cloud Run Seismic & Climate)
     if req.use_live_feed:
-        elev_data, weather_data, seismic, climate = await asyncio.gather(
+        elev_data, weather_data, flood_data, seismic, climate = await asyncio.gather(
             fetch_live_elevation(lat, lon),
             fetch_live_weather(lat, lon),
+            fetch_live_flood(lat, lon),
             _query_seismic_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
             _query_climate_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
         )
     else:
-        elev_data = {"elevation_meters": round(terrain.elevation_meters, 1), "source": "DETERMINISTIC_FALLBACK"}
+        elev_data = {
+            "elevation_meters": round(TerrainEngine.get_elevation(lat, lon), 1),
+            "slope_degrees": None,
+            "horizon_mask_deg": None,
+            "source": "DETERMINISTIC_FALLBACK",
+        }
         weather_data = {
             "temperature_celsius": 18.0,
             "humidity_pct": 55.0,
+            "wet_bulb_celsius": compute_wet_bulb_celsius(18.0, 55.0),
             "surface_pressure_hpa": 1013.25,
             "wind_speed_mps": 4.0,
             "wind_direction_deg": 180.0,
             "precipitation_mm": 0.0,
+            "source": "DETERMINISTIC_FALLBACK",
+        }
+        flood_data = {
+            "river_discharge_m3s": 0.0,
+            "river_discharge_3d_max_m3s": 0.0,
+            "flood_surge_ratio": 1.0,
             "source": "DETERMINISTIC_FALLBACK",
         }
         seismic = {"status": "DEGRADED_FALLBACK", "action": "CLEAR", "severity": 0.0, "force_majeure": False, "alternate_hubs": [], "url": SEISMIC_ORACLE_URL}
@@ -265,9 +287,37 @@ async def _run_infrastructure_assessment(
     elevation_m = float(elev_data["elevation_meters"])
     temp_c = float(weather_data["temperature_celsius"])
     wind_mps = float(weather_data["wind_speed_mps"])
+    precip_mm = float(weather_data.get("precipitation_mm", 0.0))
+    wet_bulb_c = float(
+        weather_data.get("wet_bulb_celsius")
+        if weather_data.get("wet_bulb_celsius") is not None
+        else compute_wet_bulb_celsius(temp_c, float(weather_data.get("humidity_pct", 55.0)))
+    )
+
+    # 2. Anchor Terrain (5-pt DEM slope) & RF/Starlink (orbital shell + DEM horizon mask) to live measurements
+    terrain = TerrainEngine.analyze(
+        input_data=GeoCoordinateInput(latitude=lat, longitude=lon, agent_id=req.asset_id),
+        fee_paid=0.0,
+        settlement_network=settlement_network,
+        live_dem=elev_data,
+    )
+    rf = RFEngine.analyze(
+        RFQueryInput(latitude=lat, longitude=lon, altitude_agl_meters=15.0),
+        fee_paid=0.0,
+        settlement_network=settlement_network,
+        terrain_horizon_mask_deg=elev_data.get("horizon_mask_deg"),
+        elevation_meters=elevation_m,
+    )
 
     flood_risk, cooling_stress, wind_hazard, site_penalty = _classify_site_indicators(
-        elevation_m, temp_c, wind_mps, asset_type
+        elevation_m,
+        temp_c,
+        wind_mps,
+        asset_type,
+        precipitation_mm=precip_mm,
+        wet_bulb_c=wet_bulb_c,
+        river_discharge_3d_max_m3s=float(flood_data.get("river_discharge_3d_max_m3s", 0.0)),
+        flood_surge_ratio=float(flood_data.get("flood_surge_ratio", 1.0)),
     )
 
     # 3. Synthesize Earth Infrastructure Risk Score (0-100)
@@ -349,7 +399,7 @@ async def _run_infrastructure_assessment(
     proof_hash = "0x" + hashlib.sha256(proof_payload.encode("utf-8")).hexdigest()
 
     return {
-        "schema_version": "earth-infra-risk/1.1",
+        "schema_version": "earth-infra-risk/1.2",
         "mode": "FREE_PREVIEW" if preview else "VERIFIED_PAID",
         "asset": {
             "asset_id": req.asset_id,
@@ -376,26 +426,44 @@ async def _run_infrastructure_assessment(
             "terrain": {
                 "elevation_meters": elevation_m,
                 "slope_degrees": terrain.slope_gradient_degrees,
+                "aspect_degrees": terrain.aspect_degrees,
+                "horizon_mask_deg": elev_data.get("horizon_mask_deg"),
                 "terrain_classification": terrain.terrain_classification,
                 "data_source": elev_data["source"],
             },
             "weather": {
                 "temperature_celsius": temp_c,
                 "humidity_pct": weather_data["humidity_pct"],
+                "wet_bulb_celsius": wet_bulb_c,
                 "surface_pressure_hpa": weather_data["surface_pressure_hpa"],
                 "wind_speed_mps": wind_mps,
                 "wind_direction_deg": weather_data["wind_direction_deg"],
-                "precipitation_mm": weather_data["precipitation_mm"],
+                "precipitation_mm": precip_mm,
                 "data_source": weather_data["source"],
+            },
+            "hydrology_flood": {
+                "river_discharge_m3s": flood_data["river_discharge_m3s"],
+                "river_discharge_3d_max_m3s": flood_data["river_discharge_3d_max_m3s"],
+                "flood_surge_ratio": flood_data["flood_surge_ratio"],
+                "data_source": flood_data["source"],
             },
             "connectivity": {
                 "cellular_tech": rf.cellular.carrier_technology,
                 "rsrp_dbm": rf.cellular.rsrp_dbm,
                 "starlink_leo_los_pct": starlink_los,
                 "gnss_pdop": rf.satellite.gnss_pdop,
+                "data_source": "ORBITAL_SHELL_PHYSICS_AND_DEM_HORIZON",
             },
             "seismic": seismic,
             "climate": climate,
+        },
+        "data_provenance": {
+            "terrain": elev_data["source"],
+            "weather": weather_data["source"],
+            "hydrology_flood": flood_data["source"],
+            "connectivity": "ORBITAL_SHELL_PHYSICS_AND_DEM_HORIZON",
+            "seismic": f"LIVE_CLOUD_RUN_SUBORACLE ({seismic['status']})",
+            "climate": f"LIVE_CLOUD_RUN_SUBORACLE ({climate['status']})",
         },
         "settlement": {
             "fee_paid_usdc": fee_paid,
