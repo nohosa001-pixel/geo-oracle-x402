@@ -58,3 +58,27 @@ python -m pytest -v
 docker build -t geo-oracle-x402:3.0.0 .
 docker run -p 8080:8080 geo-oracle-x402:3.0.0
 ```
+
+---
+
+## 4. Agent Quickstart & cURL Examples
+
+### Free Risk Preview (cURL)
+
+```bash
+curl -X POST http://localhost:8080/v1/infrastructure/preview \
+  -H "Content-Type: application/json" \
+  -d '{"asset_id":"DC-SEOUL-01","asset_type":"DATA_CENTER","latitude":37.5665,"longitude":126.9780}'
+```
+
+### End-to-End Python Agent (Free Preview → Paid x402 Assess)
+
+```bash
+python examples/quickstart_agent.py --url http://localhost:8080
+```
+
+### Live Deployment Smoke Test & Operations
+
+- Live deployment verification: `python scripts/smoke_test_live.py --url https://<YOUR-CLOUD-RUN-URL>`
+- CI/CD Cloud Run workflow: `.github/workflows/deploy-cloudrun.yml`
+- Operations, Cloud Logging alerts & Redis scaling guide: `docs/OPERATIONS_GUIDE.md`
