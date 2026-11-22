@@ -6,11 +6,15 @@ Power Grids, Subsea Cables, Farms, Logistics Hubs).
 """
 
 import json
+import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+
+from app.core.observability import SlidingWindowRateLimiter, log_event
 
 from app.core.x402_verifier import (
     ORACLE_RECIPIENT_WALLET,
@@ -52,10 +56,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
+_cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()] or ["*"]
+_cors_allow_credentials = _cors_origins != ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=[
@@ -64,8 +72,69 @@ app.add_middleware(
         "X-402-Payer",
         "X-402-Proof-Hash",
         "X-402-Rejection-Reason",
+        "X-RateLimit-Remaining",
+        "Retry-After",
     ],
 )
+
+preview_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=int(os.getenv("PREVIEW_RATE_LIMIT_PER_MIN", "30")),
+    window_seconds=60,
+)
+
+
+@app.middleware("http")
+async def observability_and_rate_limit_middleware(request: Request, call_next):
+    """Applies per-IP rate limiting on free /preview endpoints and emits structured JSON logs."""
+    t0 = time.perf_counter()
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = (
+        forwarded_for.split(",")[0].strip()
+        if forwarded_for
+        else (request.client.host if request.client else "unknown")
+    )
+
+    remaining = -1
+    if request.method == "POST" and request.url.path == "/v1/infrastructure/preview":
+        allowed, remaining, retry_after = preview_rate_limiter.check(client_ip)
+        if not allowed:
+            log_event(
+                "rate_limit_exceeded",
+                severity="WARNING",
+                path=request.url.path,
+                client_ip=client_ip,
+                retry_after_sec=retry_after,
+            )
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "rate_limit_exceeded",
+                    "message": "Free preview rate limit exceeded. Upgrade to x402 /v1/infrastructure/assess or retry later.",
+                    "retry_after_seconds": retry_after,
+                },
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Remaining": "0",
+                },
+            )
+
+    response = await call_next(request)
+    if remaining >= 0:
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+
+    if request.url.path.startswith("/v1/"):
+        latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+        log_event(
+            "http_api_request",
+            severity="INFO" if response.status_code < 500 else "ERROR",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            latency_ms=latency_ms,
+            client_ip=client_ip,
+            x402_status=response.headers.get("X-402-Settlement-Status"),
+        )
+    return response
 
 # Register Earth Physical Infrastructure Routers (legacy drone/robotics/insurance modules removed)
 app.include_router(infrastructure_router)

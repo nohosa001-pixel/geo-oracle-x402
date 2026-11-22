@@ -27,9 +27,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Copy installed python packages from builder
 COPY --from=builder /root/.local /root/.local
 
-# Copy application source code, tests, and configurations
+# Copy application source code and documentation
 COPY app ./app
-COPY .well-known ./.well-known
 COPY README.md .
 
 EXPOSE 8080

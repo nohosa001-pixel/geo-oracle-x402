@@ -173,3 +173,38 @@ async def test_live_data_sync_trigger():
         assert "status" in data
         assert data["status"]["daemon_status"] == "ONLINE_ACTIVE"
         assert data["status"]["total_sync_cycles_completed"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_preview_rate_limit_enforced():
+    """Verifies that /v1/infrastructure/preview returns HTTP 429 when rate limit is exceeded."""
+    from app.main import preview_rate_limiter
+
+    orig_max = preview_rate_limiter.max_requests
+    preview_rate_limiter.reset()
+    preview_rate_limiter.max_requests = 2
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = {
+                "asset_id": "RL-TEST",
+                "asset_type": "DATA_CENTER",
+                "latitude": 37.5,
+                "longitude": 127.0,
+                "use_live_feed": False,
+            }
+            headers = {"X-Forwarded-For": "203.0.113.42"}
+            r1 = await client.post("/v1/infrastructure/preview", json=payload, headers=headers)
+            r2 = await client.post("/v1/infrastructure/preview", json=payload, headers=headers)
+            r3 = await client.post("/v1/infrastructure/preview", json=payload, headers=headers)
+
+            assert r1.status_code == 200
+            assert r1.headers.get("X-RateLimit-Remaining") == "1"
+            assert r2.status_code == 200
+            assert r2.headers.get("X-RateLimit-Remaining") == "0"
+            assert r3.status_code == 429
+            assert r3.json()["error"] == "rate_limit_exceeded"
+            assert "Retry-After" in r3.headers
+    finally:
+        preview_rate_limiter.max_requests = orig_max
+        preview_rate_limiter.reset()

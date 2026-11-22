@@ -235,3 +235,89 @@ async def test_infrastructure_assess_x402_e2e(agent_signer):
             assert body["summary"]["risk_grade"] in ("ELEVATED", "CRITICAL")
             assert "ELEVATED_SEISMIC_CORRELATED_RISK" in body["summary"]["bcbs_resilience_flags"]
             assert body["settlement"]["fee_paid_usdc"] == 0.015
+
+
+def test_site_indicators_classification():
+    from app.oracles.infrastructure.router import _classify_site_indicators
+
+    # Low elevation coastal DATA_CENTER in extreme heat
+    flood, cooling, wind, penalty = _classify_site_indicators(2.0, 38.0, 8.0, "DATA_CENTER")
+    assert flood == "HIGH"
+    assert cooling == "HIGH"
+    assert wind == "LOW"
+    assert penalty == 24.0
+
+    # SUBSEA_CABLE is exempt from coastal elevation flood risk
+    flood_sub, cooling_sub, wind_sub, penalty_sub = _classify_site_indicators(0.5, 18.0, 22.0, "SUBSEA_CABLE")
+    assert flood_sub == "LOW"
+    assert cooling_sub == "LOW"
+    assert wind_sub == "HIGH"
+    assert penalty_sub == 3.0
+
+
+@pytest.mark.asyncio
+async def test_infrastructure_degraded_fallback_weight_renormalization():
+    """When seismic sub-oracle is degraded, active layer weights re-normalize and confidence is PARTIAL."""
+    degraded_seismic = {
+        "status": "DEGRADED_FALLBACK",
+        "action": "CLEAR",
+        "severity": 0.0,
+        "force_majeure": False,
+        "alternate_hubs": [],
+        "url": "https://mock-seismic",
+    }
+    high_climate = {
+        "status": "OK",
+        "action": "CAUTION",
+        "severity": 60.0,
+        "force_majeure": False,
+        "url": "https://mock-climate",
+    }
+    mock_elev = {"elevation_meters": 50.0, "source": "MOCK"}
+    mock_weather = {
+        "temperature_celsius": 20.0,
+        "humidity_pct": 50.0,
+        "surface_pressure_hpa": 1013.25,
+        "wind_speed_mps": 5.0,
+        "wind_direction_deg": 180.0,
+        "precipitation_mm": 0.0,
+        "source": "MOCK",
+    }
+
+    with (
+        patch("app.oracles.infrastructure.router.fetch_live_elevation", new=AsyncMock(return_value=mock_elev)),
+        patch("app.oracles.infrastructure.router.fetch_live_weather", new=AsyncMock(return_value=mock_weather)),
+        patch("app.oracles.infrastructure.router._query_seismic_suboracle", new=AsyncMock(return_value=degraded_seismic)),
+        patch("app.oracles.infrastructure.router._query_climate_suboracle", new=AsyncMock(return_value=high_climate)),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/v1/infrastructure/preview",
+                json={
+                    "asset_id": "DC-DEGRADED-01",
+                    "asset_type": "DATA_CENTER",
+                    "latitude": 37.5665,
+                    "longitude": 126.9780,
+                    "use_live_feed": True,
+                },
+            )
+            assert r.status_code == 200
+            summary = r.json()["summary"]
+            assert summary["assessment_confidence"] == "PARTIAL"
+            assert summary["degraded_layers"] == ["seismic"]
+            assert "SUBORACLE_CONTINGENCY_FALLBACK_ACTIVE" in summary["bcbs_resilience_flags"]
+            # Re-normalized climate weight (0.35 / 0.55 = 63.6%) * 60.0 >= 38.0 (would be only 21.0 without re-norm)
+            assert summary["combined_risk_score"] >= 38.0
+
+
+def test_in_memory_nonce_store_lifecycle():
+    from app.core.nonce_store import InMemoryNonceStore
+
+    store = InMemoryNonceStore()
+    store.issue("x402_test_nonce", {"price_usdc": "0.005"}, ttl_seconds=60)
+    assert store.get_active("x402_test_nonce") is not None
+    assert not store.is_consumed("x402_test_nonce")
+
+    store.consume("x402_test_nonce")
+    assert store.get_active("x402_test_nonce") is None
+    assert store.is_consumed("x402_test_nonce")

@@ -15,6 +15,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct, encode_typed_data
 
 from app.core.base_schemas import X402PaymentRequirement
+from app.core.nonce_store import get_nonce_store
 from app.core.multi_chain_config import (
     SUPPORTED_NETWORKS,
     DEFAULT_NETWORK,
@@ -36,10 +37,8 @@ ORACLE_RECIPIENT_WALLET = EVM_RECIPIENT_WALLET
 DEFAULT_MICRO_PRICE_USDC = os.getenv("MICRO_PRICE_USDC", "0.005")
 CHALLENGE_EXPIRY_SECONDS = int(os.getenv("CHALLENGE_EXPIRY_SECONDS", "300"))
 SOLANA_USDC_MINT = os.getenv("SOLANA_USDC_MINT", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
-
-# In-memory storage for active nonces and consumed nonces
-_ACTIVE_NONCES: Dict[str, Dict[str, Any]] = {}
-_CONSUMED_NONCES: set = set()
+X402_ENABLE_FACILITATOR = os.getenv("X402_ENABLE_FACILITATOR", "false").lower() == "true"
+X402_FACILITATOR_URL = os.getenv("X402_FACILITATOR_URL", "https://facilitator.x402.org/v1/verify")
 
 
 class X402Verifier:
@@ -47,6 +46,25 @@ class X402Verifier:
     Multi-Chain x402 Payment Protocol Verifier.
     Handles cryptographic micro-settlements across Polygon, Solana, Base, Arbitrum, and Ethereum.
     """
+
+    @classmethod
+    def _verify_facilitator_settlement(cls, payload_data: Dict[str, Any], network: str) -> Tuple[bool, str]:
+        """Optional external x402 Facilitator verification hook (enabled via X402_ENABLE_FACILITATOR=true)."""
+        if not X402_ENABLE_FACILITATOR:
+            return True, "Facilitator verification disabled (local cryptographic mode)"
+        try:
+            import httpx
+
+            resp = httpx.post(
+                X402_FACILITATOR_URL,
+                json={"network": network, "payment": payload_data},
+                timeout=3.0,
+            )
+            if resp.status_code == 200 and resp.json().get("verified", False):
+                return True, "Facilitator settlement verified"
+            return False, f"Facilitator rejected payment (HTTP {resp.status_code})"
+        except Exception as exc:
+            return False, f"Facilitator verification unreachable: {exc}"
 
     @classmethod
     def generate_challenge(
@@ -63,21 +81,19 @@ class X402Verifier:
         nonce = f"x402_{secrets.token_hex(16)}"
         expiry = int(time.time()) + CHALLENGE_EXPIRY_SECONDS
 
-        # Clean expired nonces
-        now = int(time.time())
-        expired_keys = [k for k, meta in _ACTIVE_NONCES.items() if meta.get("expiry", 0) < now]
-        for k in expired_keys:
-            _ACTIVE_NONCES.pop(k, None)
-
         price_float = float(price_usdc)
         price_units = str(int(price_float * (10 ** net_cfg.get("decimals", 6))))
 
-        _ACTIVE_NONCES[nonce] = {
-            "expiry": expiry,
-            "price_usdc": price_usdc,
-            "oracle_name": oracle_name,
-            "network": net_cfg["network"],
-        }
+        get_nonce_store().issue(
+            nonce=nonce,
+            metadata={
+                "expiry": expiry,
+                "price_usdc": price_usdc,
+                "oracle_name": oracle_name,
+                "network": net_cfg["network"],
+            },
+            ttl_seconds=CHALLENGE_EXPIRY_SECONDS,
+        )
 
         network_name = net_cfg["network"]
         display_net = net_cfg["display_name"]
@@ -247,15 +263,16 @@ class X402Verifier:
             return False, "Incomplete payment payload: payer_address, signature, nonce, and timestamp are required", None
 
         # Check replay prevention
-        if nonce in _CONSUMED_NONCES:
+        store = get_nonce_store()
+        if store.is_consumed(nonce):
             return False, f"Nonce {nonce} has already been consumed (replay prevention)", None
 
-        if nonce not in _ACTIVE_NONCES:
+        active_meta = store.get_active(nonce)
+        if active_meta is None:
             if not nonce.startswith("x402_"):
                 return False, f"Invalid or unrecognized challenge nonce: {nonce}", None
         else:
-            meta = _ACTIVE_NONCES[nonce]
-            if time.time() > meta["expiry"]:
+            if time.time() > active_meta["expiry"]:
                 return False, "Payment challenge nonce has expired", None
 
         # Verify timestamp freshness (300s TTL window, 60s future clock skew allowance)
@@ -312,9 +329,12 @@ class X402Verifier:
             if not is_valid:
                 return False, f"Solana authorization rejected: {err_msg}", None
 
+            fac_ok, fac_msg = cls._verify_facilitator_settlement(payload_data, "solana")
+            if not fac_ok:
+                return False, fac_msg, None
+
             # Mark nonce consumed
-            _CONSUMED_NONCES.add(nonce)
-            _ACTIVE_NONCES.pop(nonce, None)
+            store.consume(nonce)
 
             settlement_metadata = {
                 "payer": payer_address,
@@ -375,9 +395,12 @@ class X402Verifier:
                 None,
             )
 
+        fac_ok, fac_msg = cls._verify_facilitator_settlement(payload_data, target_network)
+        if not fac_ok:
+            return False, fac_msg, None
+
         # Mark nonce as consumed
-        _CONSUMED_NONCES.add(nonce)
-        _ACTIVE_NONCES.pop(nonce, None)
+        store.consume(nonce)
 
         settlement_metadata = {
             "payer": payer_address,

@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.core.base_schemas import X402PaymentRequirement
 from app.core.live_earth_feeds import fetch_live_elevation, fetch_live_weather
+from app.core.observability import log_event
 from app.core.x402_verifier import X402Verifier
 from app.oracles.infrastructure.registry import get_asset_by_id, list_assets
 from app.oracles.rf_coverage.engine import RFEngine
@@ -117,7 +118,15 @@ async def _query_seismic_suboracle(
                 "alternate_hubs": data.get("alternate_hubs_suggested", []),
                 "url": SEISMIC_ORACLE_URL,
             }
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "suboracle_degraded_fallback",
+            severity="WARNING",
+            suboracle="seismic",
+            asset_id=asset_id,
+            url=SEISMIC_ORACLE_URL,
+            error=str(exc),
+        )
         return {
             "status": "DEGRADED_FALLBACK",
             "action": "CLEAR",
@@ -155,7 +164,15 @@ async def _query_climate_suboracle(
                 "force_majeure": bool(data.get("force_majeure_triggered", False)),
                 "url": CLIMATE_ORACLE_URL,
             }
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "suboracle_degraded_fallback",
+            severity="WARNING",
+            suboracle="climate",
+            asset_id=asset_id,
+            url=CLIMATE_ORACLE_URL,
+            error=str(exc),
+        )
         return {
             "status": "DEGRADED_FALLBACK",
             "action": "CLEAR",
@@ -254,20 +271,34 @@ async def _run_infrastructure_assessment(
     )
 
     # 3. Synthesize Earth Infrastructure Risk Score (0-100)
+    # Re-normalize weights across active (non-degraded) layers so a sub-oracle outage
+    # does not artificially deflate the composite risk score toward 0.
     weights = _ASSET_WEIGHTS.get(asset_type, _ASSET_WEIGHTS["DATA_CENTER"])
     starlink_los = float(rf.satellite.leo_starlink_los_pct)
     connectivity_risk = max(0.0, min(100.0, 100.0 - starlink_los))
 
-    combined_score = round(
-        min(
-            100.0,
-            seismic["severity"] * weights["seismic"]
-            + climate["severity"] * weights["climate"]
-            + connectivity_risk * weights["connectivity"]
-            + site_penalty,
-        ),
-        2,
-    )
+    degraded_layers: List[str] = []
+    active_components: List[tuple[float, float]] = [(connectivity_risk, weights["connectivity"])]
+    if seismic["status"] == "OK":
+        active_components.append((seismic["severity"], weights["seismic"]))
+    else:
+        degraded_layers.append("seismic")
+
+    if climate["status"] == "OK":
+        active_components.append((climate["severity"], weights["climate"]))
+    else:
+        degraded_layers.append("climate")
+
+    total_active_weight = sum(w for _, w in active_components) or 1.0
+    weighted_hazard = sum(val * (w / total_active_weight) for val, w in active_components)
+    combined_score = round(min(100.0, weighted_hazard + site_penalty), 2)
+
+    if len(degraded_layers) == 0:
+        assessment_confidence = "HIGH"
+    elif len(degraded_layers) == 1:
+        assessment_confidence = "PARTIAL"
+    else:
+        assessment_confidence = "DEGRADED"
 
     if combined_score >= 70.0 or seismic["force_majeure"] or climate["force_majeure"]:
         risk_grade = "CRITICAL"
@@ -333,6 +364,8 @@ async def _run_infrastructure_assessment(
             "risk_grade": risk_grade,
             "recommended_action": recommended_action,
             "settlement_cleared": settlement_cleared,
+            "assessment_confidence": assessment_confidence,
+            "degraded_layers": degraded_layers,
             "flood_elevation_risk": flood_risk,
             "cooling_heat_stress": cooling_stress,
             "wind_hazard_level": wind_hazard,
