@@ -161,7 +161,12 @@ async def serve_llms_txt():
         "- `POST /v1/infrastructure/assess` (x402, 0.015 USDC): Verified assessment with deterministic proof hash.\n"
         "- `POST /v1/terrain/analyze` (x402, 0.005 USDC): WGS84 terrain elevation & slope.\n"
         "- `POST /v1/weather/analyze` (x402, 0.005 USDC): Site micro-weather & atmospheric conditions.\n"
-        "- `POST /v1/rf/coverage` (x402, 0.005 USDC): 5G/LTE & Starlink LEO connectivity redundancy.\n"
+        "- `POST /v1/rf/coverage` (x402, 0.005 USDC): 5G/LTE & Starlink LEO connectivity redundancy.\n\n"
+        "## A.GRID Ecosystem Sibling Oracles\n"
+        "- Security Gate x402 (Prompt Injection & Escrow Firewall): https://agent-security-gate-x402-7qxtp3324q-du.a.run.app/llms.txt\n"
+        "- EUDR Deforestation & TRACES-NT Compliance: https://eudragent.com/llms.txt\n"
+        "- Critical Minerals & Battery Passport Oracle: https://minerals-oracle-x402-7qxtp3324q-du.a.run.app/llms.txt\n"
+        "- CleanWeb Agent (RAG Scraping & Search): https://x402-cleanweb-agent-7qxtp3324q-du.a.run.app/llms.txt\n"
     )
 
 
