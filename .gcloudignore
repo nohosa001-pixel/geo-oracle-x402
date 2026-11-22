@@ -1,0 +1,14 @@
+.git
+.gitignore
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+cloudflared.exe
+data/
+contracts/
+tests/
+scripts/
