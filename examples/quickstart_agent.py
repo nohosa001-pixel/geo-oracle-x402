@@ -32,22 +32,24 @@ def build_eip712_payment_header(signer: Account, challenge: dict) -> str:
                 {"name": "chainId", "type": "uint256"},
                 {"name": "verifyingContract", "type": "address"},
             ],
-            "X402Payment": [
+            "MicroOraclePayment": [
                 {"name": "recipient", "type": "address"},
+                {"name": "token", "type": "address"},
                 {"name": "amount", "type": "string"},
                 {"name": "nonce", "type": "string"},
                 {"name": "timestamp", "type": "uint256"},
             ],
         },
-        "primaryType": "X402Payment",
+        "primaryType": "MicroOraclePayment",
         "domain": {
-            "name": "x402-Geo-Terrain-Oracle",
+            "name": "Global Autonomous Physical AI Oracle Suite",
             "version": "1",
             "chainId": int(challenge.get("chain_id") or 137),
             "verifyingContract": challenge["token_address"],
         },
         "message": {
             "recipient": challenge["recipient_address"],
+            "token": challenge["token_address"],
             "amount": challenge["price_usdc"],
             "nonce": challenge["nonce"],
             "timestamp": now_ts,
