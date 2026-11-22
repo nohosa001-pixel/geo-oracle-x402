@@ -58,7 +58,7 @@ jobs:
           source: .
           flags: >-
             --allow-unauthenticated
-            --set-env-vars=CORS_ALLOW_ORIGINS=*,PREVIEW_RATE_LIMIT_PER_MIN=30
+            --set-env-vars=CORS_ALLOW_ORIGINS=*,PREVIEW_RATE_LIMIT_PER_MIN=30,SUBORACLE_TIMEOUT_SEC=10.0
 
       - name: Run Live Smoke Test
         run: |

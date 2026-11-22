@@ -42,7 +42,7 @@ CLIMATE_ORACLE_URL = os.getenv(
     "CLIMATE_ORACLE_URL",
     "https://climate-insurance-agent-212942243360.asia-northeast3.run.app",
 ).rstrip("/")
-SUBORACLE_TIMEOUT_SEC = float(os.getenv("SUBORACLE_TIMEOUT_SEC", "4.0"))
+SUBORACLE_TIMEOUT_SEC = float(os.getenv("SUBORACLE_TIMEOUT_SEC", "10.0"))
 
 AssetType = Literal[
     "DATA_CENTER",
