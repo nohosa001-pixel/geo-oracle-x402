@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app.core.x402_verifier import (
     ORACLE_RECIPIENT_WALLET,
@@ -137,7 +137,10 @@ async def root_info():
         ],
         "standards": {
             "llms_txt": "/llms.txt",
+            "robots_txt": "/robots.txt",
+            "sitemap_xml": "/sitemap.xml",
             "agent_card": "/.well-known/agent-card.json",
+            "x402_manifest": "/.well-known/x402.json",
             "google_ap2_manifest": "/.well-known/ap2.json",
             "openapi_docs": "/docs",
             "live_sync_telemetry": "/v1/system/sync-status",
@@ -226,9 +229,12 @@ async def get_agent_card():
         ),
         "endpoints": {
             "free_catalog": "/v1/infrastructure/catalog",
+            "free_assets": "/v1/infrastructure/assets",
             "free_preview": "/v1/infrastructure/preview",
             "paid_assess": "/v1/infrastructure/assess",
             "llms_txt": "/llms.txt",
+            "x402_manifest": "/.well-known/x402.json",
+            "sitemap_xml": "/sitemap.xml",
             "openapi": "/openapi.json",
         },
         "settlement": {
@@ -250,4 +256,82 @@ async def get_google_ap2_manifest():
         "version": "3.0.0",
         "recipient_address": ORACLE_RECIPIENT_WALLET,
         "solana_vault": SOLANA_ORACLE_VAULT,
+    }
+
+
+_GEO_CANONICAL_BASE = "https://geo-oracle-x402-7qxtp3324q-du.a.run.app"
+
+
+@app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse, tags=["Agent Standards"], include_in_schema=False)
+async def serve_robots_txt():
+    """Crawler & AI agent discovery directives."""
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /llms.txt\n"
+        "Allow: /sitemap.xml\n"
+        "Allow: /.well-known/agent-card.json\n"
+        "Allow: /.well-known/x402.json\n"
+        "Allow: /v1/infrastructure/catalog\n"
+        "Allow: /v1/infrastructure/assets\n"
+        f"Sitemap: {_GEO_CANONICAL_BASE}/sitemap.xml\n"
+        f"LLMs-Txt: {_GEO_CANONICAL_BASE}/llms.txt\n"
+    )
+
+
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"], tags=["Agent Standards"], include_in_schema=False)
+async def serve_sitemap_xml():
+    """Canonical XML sitemap for search engines and AI indexers."""
+    urls = [
+        ("/", "1.0", "daily"),
+        ("/llms.txt", "1.0", "daily"),
+        ("/.well-known/agent-card.json", "0.95", "daily"),
+        ("/.well-known/x402.json", "0.95", "daily"),
+        ("/.well-known/ap2.json", "0.9", "weekly"),
+        ("/v1/infrastructure/catalog", "0.95", "daily"),
+        ("/v1/infrastructure/assets", "0.95", "daily"),
+        ("/docs", "0.8", "weekly"),
+        ("/health", "0.7", "hourly"),
+    ]
+    entries = "\n".join(
+        f"  <url>\n    <loc>{_GEO_CANONICAL_BASE}{path}</loc>\n    <lastmod>2026-11-22</lastmod>\n    <changefreq>{freq}</changefreq>\n    <priority>{prio}</priority>\n  </url>"
+        for path, prio, freq in urls
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{entries}\n"
+        "</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.api_route("/.well-known/x402", methods=["GET", "HEAD"], tags=["Agent Standards"])
+@app.api_route("/.well-known/x402.json", methods=["GET", "HEAD"], tags=["Agent Standards"])
+async def get_x402_manifest():
+    """Machine-readable x402 payment & pricing discovery manifest."""
+    return {
+        "x402Version": 1,
+        "service": "geo-oracle-x402",
+        "name": "A.GRID Earth Physical Infrastructure Risk Hub",
+        "version": "3.0.0",
+        "base_url": _GEO_CANONICAL_BASE,
+        "settlement": {
+            "networks": ["solana", "polygon", "base", "arbitrum", "ethereum"],
+            "currency": "USDC",
+            "evm_recipient": ORACLE_RECIPIENT_WALLET,
+            "solana_vault": SOLANA_ORACLE_VAULT,
+            "solana_usdc_mint": SOLANA_USDC_MINT,
+        },
+        "free_endpoints": [
+            {"method": "GET", "path": "/v1/infrastructure/catalog"},
+            {"method": "GET", "path": "/v1/infrastructure/assets"},
+            {"method": "POST", "path": "/v1/infrastructure/preview"},
+        ],
+        "paid_endpoints": [
+            {"method": "POST", "path": "/v1/infrastructure/assess", "price_usdc": 0.015},
+            {"method": "POST", "path": "/v1/terrain/analyze", "price_usdc": 0.005},
+            {"method": "POST", "path": "/v1/weather/analyze", "price_usdc": 0.005},
+            {"method": "POST", "path": "/v1/rf/coverage", "price_usdc": 0.005},
+        ],
     }
