@@ -15,6 +15,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.brain.geo_brain_engine import brain_engine
+from app.brain.security_gate_bridge import security_gate_bridge
 from app.core.sister_federation import get_federation_mesh_status
 
 router = APIRouter(prefix="/v1/brain", tags=["5. Geo-Oracle elizaOS Brain"])
@@ -25,6 +26,58 @@ CHARACTER_PATH = Path(__file__).resolve().parent / "character.json"
 class BrainCycleRequest(BaseModel):
     asset_ids: Optional[List[str]] = Field(default=None, description="Optional subset of registry asset IDs to evaluate")
     use_live_feed: bool = Field(default=True, description="Fetch live Tier-1 feeds during this learning cycle")
+
+
+class BrainPerceptionInput(BaseModel):
+    caller_agent_id: str = Field(..., description="Calling agent identifier")
+    message: str = Field(..., description="Natural-language or structured perception payload")
+    requested_spend_usdc: float = Field(default=0.0, ge=0.0, description="Optional x402 spend requested by caller")
+
+
+@router.get("/security-gate/status")
+async def get_brain_security_gate_status():
+    """Returns Security Gate x402 governance status, immune memory, and spend guardrails."""
+    return await security_gate_bridge.get_governance_status()
+
+
+@router.post("/perceive")
+async def perceive_with_security_gate(body: BrainPerceptionInput):
+    """
+    Security-Gate-shielded inbound perception endpoint for external agents and sister Brains.
+    Blocks prompt injection, script/command injection, and over-budget spend requests with HTTP 403.
+    """
+    ok, threat = security_gate_bridge.inspect_inbound_text(
+        f"{body.caller_agent_id} {body.message}", source="brain.perceive"
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "SECURITY_GATE_BLOCKED",
+                "threat": threat,
+                "policy": "A.GRID-SG-4TIER-v1",
+            },
+        )
+
+    if body.requested_spend_usdc > 0:
+        spend_ok, spend_msg = security_gate_bridge.spend_guard.authorize_spend(body.requested_spend_usdc)
+        if not spend_ok:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "SECURITY_GATE_SPEND_CAP_BLOCKED",
+                    "reason": spend_msg,
+                    "spend_guard": security_gate_bridge.spend_guard.snapshot(),
+                },
+            )
+
+    return {
+        "status": "APPROVED_BY_SECURITY_GATE",
+        "policy": "A.GRID-SG-4TIER-v1",
+        "caller_agent_id": body.caller_agent_id,
+        "eu_ai_act_art50_watermark": True,
+        "spend_guard": security_gate_bridge.spend_guard.snapshot(),
+    }
 
 
 @router.get("/status")

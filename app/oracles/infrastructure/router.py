@@ -19,6 +19,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.brain.security_gate_bridge import security_gate_bridge
 from app.core.base_schemas import X402PaymentRequirement
 from app.core.live_earth_feeds import (
     compute_wet_bulb_celsius,
@@ -275,6 +276,16 @@ async def _run_infrastructure_assessment(
     trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
+    safe_in, threat = security_gate_bridge.inspect_infrastructure_inputs(req.asset_id, req.commodity)
+    if not safe_in:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "SECURITY_GATE_INPUT_BLOCKED",
+                "threat": threat,
+                "policy": "A.GRID-SG-4TIER-v1",
+            },
+        )
     lat, lon, asset_type, commodity, asset_name = _resolve_asset_coordinates(req)
 
     # 1. Concurrent live Earth & Tier-1 Digital Infrastructure telemetry (+ conditional sister oracle)

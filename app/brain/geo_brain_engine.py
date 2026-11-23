@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.brain.checkpoint_store import BrainCheckpointStore
+from app.brain.security_gate_bridge import security_gate_bridge
 from app.core.observability import log_event
 from app.oracles.infrastructure.registry import GLOBAL_INFRASTRUCTURE_ASSETS
 from app.oracles.infrastructure.router import (
@@ -230,12 +231,26 @@ class GeoOracleBrainEngine:
                 "data_provenance": assessment.get("data_provenance", {}),
             }
 
+            # Mandatory Security Gate Memory-Write Governance Check
+            approved, attestation = security_gate_bridge.verify_memory_record(record)
+            record["security_gate_attestation"] = attestation
+            if not approved:
+                log_event(
+                    "security_gate_memory_quarantined",
+                    severity="WARNING",
+                    asset_id=aid,
+                    block_id=block_id,
+                    reason=attestation.get("reason"),
+                )
+                continue
+
             working[aid] = {
                 "combined_risk_score": score,
                 "risk_grade": summary["risk_grade"],
                 "assessment_confidence": confidence,
                 "last_observed_utc": record["observed_at_utc"],
                 "block_id": block_id,
+                "security_gate_attested": True,
             }
             self.episodic_memory.append(record)
             cycle_records.append(record)
