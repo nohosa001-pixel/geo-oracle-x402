@@ -99,3 +99,27 @@ async def test_brain_cycle_endpoint_and_secret_protection(tmp_path: Path):
             r_mem = await client.get("/v1/brain/memory?asset_id=DC-SEOUL-KR&limit=5")
             assert r_mem.status_code == 200
             assert len(r_mem.json()["records"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_sister_federation_hop_limit_and_discovery():
+    """Verifies MAX_FEDERATION_HOPS loop guard and agent-card sister federation discovery."""
+    from app.core.sister_federation import query_eudr_sister, query_minerals_sister
+
+    # Hop count >= 2 must refuse fan-out immediately without external HTTP calls
+    minerals_blocked = await query_minerals_sister(commodity="LITHIUM", hop_count=2)
+    assert minerals_blocked["status"] == "HOP_LIMIT_REACHED"
+    assert "/api/v1/lithium/verify-origin" in minerals_blocked["handoff_endpoint"]
+
+    eudr_blocked = await query_eudr_sister(hop_count=2)
+    assert eudr_blocked["status"] == "HOP_LIMIT_REACHED"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r_card = await client.get("/.well-known/agent-card.json")
+        assert r_card.status_code == 200
+        card = r_card.json()
+        assert "federation_peers" in card
+        assert "minerals" in card["federation_peers"]
+        assert "eudr" in card["federation_peers"]
+        assert "security_gate" in card["federation_peers"]
+        assert card["endpoints"]["brain_federation"] == "/v1/brain/federation"

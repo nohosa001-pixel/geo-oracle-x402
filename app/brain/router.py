@@ -15,6 +15,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.brain.geo_brain_engine import brain_engine
+from app.core.sister_federation import get_federation_mesh_status
 
 router = APIRouter(prefix="/v1/brain", tags=["5. Geo-Oracle elizaOS Brain"])
 
@@ -39,6 +40,12 @@ async def get_brain_character():
     if CHARACTER_PATH.exists():
         return json.loads(CHARACTER_PATH.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail="character.json not found")
+
+
+@router.get("/federation")
+async def get_brain_federation():
+    """Returns live A.GRID sister systems mesh health and cross-domain routing directory."""
+    return await get_federation_mesh_status()
 
 
 @router.get("/memory")

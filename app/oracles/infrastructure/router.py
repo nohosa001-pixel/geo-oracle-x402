@@ -27,6 +27,7 @@ from app.core.live_earth_feeds import (
     fetch_live_weather,
 )
 from app.core.observability import log_event
+from app.core.sister_federation import query_eudr_sister, query_minerals_sister
 from app.core.tier1_earth_feeds import (
     fetch_nasa_eonet_hazards,
     fetch_peeringdb_facilities,
@@ -270,12 +271,27 @@ async def _run_infrastructure_assessment(
     fee_paid: float,
     settlement_network: str,
     preview: bool = False,
+    hop_count: int = 0,
+    trace_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
     lat, lon, asset_type, commodity, asset_name = _resolve_asset_coordinates(req)
 
-    # 1. Concurrent live Earth & Tier-1 Digital Infrastructure telemetry (9 layers in parallel)
+    # 1. Concurrent live Earth & Tier-1 Digital Infrastructure telemetry (+ conditional sister oracle)
+    sister_domain: Optional[Dict[str, Any]] = None
     if req.use_live_feed:
+        async def _no_sister() -> Optional[Dict[str, Any]]:
+            return None
+
+        sister_coro = (
+            query_minerals_sister(commodity=commodity, hop_count=hop_count, trace_id=trace_id)
+            if asset_type == "MINE"
+            else (
+                query_eudr_sister(hop_count=hop_count, trace_id=trace_id)
+                if asset_type == "FARM"
+                else _no_sister()
+            )
+        )
         (
             elev_data,
             weather_data,
@@ -286,6 +302,7 @@ async def _run_infrastructure_assessment(
             peering_data,
             seismic,
             climate,
+            sister_domain,
         ) = await asyncio.gather(
             fetch_live_elevation(lat, lon),
             fetch_live_weather(lat, lon),
@@ -296,6 +313,7 @@ async def _run_infrastructure_assessment(
             fetch_peeringdb_facilities(lat, lon),
             _query_seismic_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
             _query_climate_suboracle(req.asset_id, lat, lon, asset_type, commodity, True),
+            sister_coro,
         )
     else:
         elev_data = {
@@ -515,6 +533,7 @@ async def _run_infrastructure_assessment(
             },
             "seismic": seismic,
             "climate": climate,
+            **({"sister_domain_oracle": sister_domain} if sister_domain is not None else {}),
         },
         "data_provenance": {
             "terrain": elev_data["source"],
@@ -527,6 +546,11 @@ async def _run_infrastructure_assessment(
             "connectivity": "ORBITAL_SHELL_PHYSICS_AND_DEM_HORIZON",
             "seismic": f"LIVE_CLOUD_RUN_SUBORACLE ({seismic['status']})",
             "climate": f"LIVE_CLOUD_RUN_SUBORACLE ({climate['status']})",
+            **(
+                {"sister_domain_oracle": f"A.GRID_FEDERATION ({sister_domain['sister']}:{sister_domain['status']})"}
+                if sister_domain is not None
+                else {}
+            ),
         },
         "settlement": {
             "fee_paid_usdc": fee_paid,
