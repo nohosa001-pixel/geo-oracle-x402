@@ -32,11 +32,14 @@ from app.oracles.infrastructure.router import (
 from app.oracles.rf_coverage.router import router as rf_router
 from app.oracles.terrain.router import router as terrain_router
 from app.oracles.weather.router import router as weather_router
+from app.brain.geo_brain_engine import brain_engine
+from app.brain.router import router as brain_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: launches periodic background data sync on startup and stops on shutdown."""
+    """Lifecycle manager: restores elizaOS Brain checkpoint, launches background sync, and cleans up on shutdown."""
+    await brain_engine.initialize()
     DataSyncScheduler.start()
     yield
     DataSyncScheduler.stop()
@@ -136,11 +139,12 @@ async def observability_and_rate_limit_middleware(request: Request, call_next):
         )
     return response
 
-# Register Earth Physical Infrastructure Routers (legacy drone/robotics/insurance modules removed)
+# Register Earth Physical Infrastructure & elizaOS Brain Routers
 app.include_router(infrastructure_router)
 app.include_router(terrain_router)
 app.include_router(weather_router)
 app.include_router(rf_router)
+app.include_router(brain_router)
 
 
 @app.get("/", tags=["Earth Infrastructure Hub"])
