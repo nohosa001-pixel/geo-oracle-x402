@@ -39,6 +39,9 @@ if ([string]::IsNullOrEmpty($PROJECT_ID)) {
 
 Write-Host "Deploying geo-oracle-x402 to Cloud Run ($PROJECT_ID / asia-northeast3)..." -ForegroundColor Cyan
 
+$EVM_WALLET = if ($env:ORACLE_RECIPIENT_WALLET) { $env:ORACLE_RECIPIENT_WALLET } else { "0xEbA2821B8E37eb5a231c074345c991Cb1F139920" }
+$SOL_VAULT = if ($env:SOLANA_ORACLE_VAULT) { $env:SOLANA_ORACLE_VAULT } else { "G7doJyFj1tw2mTpApCoyeCPqA3QzyuuKwKNAZvzLErsT" }
+
 gcloud run deploy geo-oracle-x402 `
     --source . `
     --region asia-northeast3 `
@@ -49,7 +52,7 @@ gcloud run deploy geo-oracle-x402 `
     --cpu 1 `
     --min-instances 0 `
     --max-instances 10 `
-    --set-env-vars="ENVIRONMENT=production" `
+    --set-env-vars="ENVIRONMENT=production,ORACLE_RECIPIENT_WALLET=$EVM_WALLET,SOLANA_ORACLE_VAULT=$SOL_VAULT" `
     --project $PROJECT_ID `
     --quiet
 
