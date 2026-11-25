@@ -2,6 +2,7 @@
 
 > **Model Context Protocol (MCP) Server** & Real-Time Earth Physical Infrastructure Risk Hub (x402 Multi-Chain & Solana). Exposes **5 MCP tools** over both **Streamable HTTP (`POST /mcp`)** and **Stdio (`mcp_server.py`)** combining 10 live Tier-1 Earth & Digital Infrastructure feeds (USGS ComCat, NASA EONET, Copernicus 5-pt DEM, Open-Meteo & Stull Wet-Bulb, ECMWF GloFAS Flood, PeeringDB DC/IXP, TeleGeography subsea cables, Starlink orbital physics) for AI Data Centers, Ports, Mines, Power Grids, Subsea Cables, Farms, and Logistics Hubs.
 
+[![Glama score](https://glama.ai/mcp/servers/nohosa001-pixel/geo-oracle-x402/badges/score.svg)](https://glama.ai/mcp/servers/nohosa001-pixel/geo-oracle-x402)
 [![CI](https://github.com/nohosa001-pixel/geo-oracle-x402/actions/workflows/ci.yml/badge.svg)](https://github.com/nohosa001-pixel/geo-oracle-x402/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol%202024--11--05-purple.svg)](https://modelcontextprotocol.io)
