@@ -34,6 +34,7 @@ from app.oracles.terrain.router import router as terrain_router
 from app.oracles.weather.router import router as weather_router
 from app.brain.geo_brain_engine import brain_engine
 from app.brain.router import router as brain_router
+from app.mcp_router import router as mcp_router
 
 
 @asynccontextmanager
@@ -145,6 +146,7 @@ app.include_router(terrain_router)
 app.include_router(weather_router)
 app.include_router(rf_router)
 app.include_router(brain_router)
+app.include_router(mcp_router)
 
 
 @app.get("/", tags=["Earth Infrastructure Hub"])

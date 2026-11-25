@@ -1,0 +1,28 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": [
+    "nohosa001-pixel"
+  ],
+  "name": "geo-oracle-x402",
+  "displayName": "A.GRID Earth Physical Infrastructure Risk Hub (geo-oracle-x402)",
+  "description": "Real-time Earth physical & digital infrastructure risk MCP server combining 10 Tier-1 live feeds (USGS ComCat, NASA EONET, Copernicus 5-pt DEM, Open-Meteo & Stull Wet-Bulb, ECMWF GloFAS Flood, PeeringDB DC/IXP, TeleGeography subsea cables, Starlink orbital physics) with x402 multi-chain settlement and an autonomous elizaOS Brain.",
+  "homepage": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app",
+  "transport": {
+    "type": "http",
+    "url": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/mcp"
+  },
+  "endpoints": {
+    "mcp": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/mcp",
+    "tools": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/mcp/tools",
+    "invoke": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/mcp/invoke",
+    "openapi": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/openapi.json",
+    "llms_txt": "https://geo-oracle-x402-212942243360.asia-northeast3.run.app/llms.txt"
+  },
+  "categories": [
+    "geospatial",
+    "infrastructure",
+    "risk-intelligence",
+    "climate-and-earth-data",
+    "web3-x402"
+  ]
+}

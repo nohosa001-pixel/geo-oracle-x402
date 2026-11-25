@@ -194,3 +194,51 @@ async def test_security_gate_governance_blocks_injection_and_enforces_spend_cap(
         r_sg = await client.get("/v1/brain/security-gate/status")
         assert r_sg.status_code == 200
         assert r_sg.json()["threats_neutralized"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_mcp_glama_endpoints_and_manifest():
+    """Verifies Glama.ai glama.json manifest and MCP JSON-RPC 2.0 endpoints (/mcp, /mcp/tools)."""
+    import json
+    from pathlib import Path
+
+    glama_path = Path(__file__).resolve().parent.parent / "glama.json"
+    assert glama_path.exists()
+    glama = json.loads(glama_path.read_text(encoding="utf-8"))
+    assert glama["name"] == "geo-oracle-x402"
+    assert "nohosa001-pixel" in glama["maintainers"]
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r_tools = await client.get("/mcp/tools")
+        assert r_tools.status_code == 200
+        tools = r_tools.json()["tools"]
+        assert len(tools) >= 5
+
+        r_init = await client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        assert r_init.status_code == 200
+        assert r_init.json()["result"]["serverInfo"]["name"] == "geo-oracle-x402"
+
+        r_list = await client.post("/mcp", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        assert r_list.status_code == 200
+        assert len(r_list.json()["result"]["tools"]) >= 5
+
+        r_call = await client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "preview_infrastructure_risk",
+                    "arguments": {
+                        "asset_id": "GLAMA-TEST-DC",
+                        "asset_type": "DATA_CENTER",
+                        "latitude": 37.5665,
+                        "longitude": 126.9780,
+                        "use_live_feed": False,
+                    },
+                },
+            },
+        )
+        assert r_call.status_code == 200
+        assert r_call.json()["result"]["isError"] is False
