@@ -267,6 +267,22 @@ async def invoke_mcp_tool(
     return await _dispatch_tool(body.name, body.arguments, auth_header=x_402_signature or authorization)
 
 
+@router.get("/mcp")
+async def mcp_streamable_http_info():
+    """Streamable HTTP discovery metadata for crawlers and MCP inspectors probing GET /mcp."""
+    return {
+        "server": "geo-oracle-x402",
+        "version": "3.0.0",
+        "protocolVersion": "2024-11-05",
+        "transport": "streamable-http",
+        "jsonrpc_endpoint": "POST /mcp",
+        "tools_endpoint": "GET /mcp/tools",
+        "invoke_endpoint": "POST /mcp/invoke",
+        "tools_count": len(MCP_TOOLS),
+        "tools": MCP_TOOLS,
+    }
+
+
 @router.post("/mcp")
 async def handle_mcp_jsonrpc(
     payload: Dict[str, Any],

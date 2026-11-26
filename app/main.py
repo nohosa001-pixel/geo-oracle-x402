@@ -20,6 +20,7 @@ from app.core.x402_verifier import (
     ORACLE_RECIPIENT_WALLET,
     SOLANA_ORACLE_VAULT,
     SOLANA_USDC_MINT,
+    X402Verifier,
 )
 from app.sync.data_registry import LiveDataRegistry
 from app.sync.scheduler import DataSyncScheduler
@@ -87,9 +88,17 @@ preview_rate_limiter = SlidingWindowRateLimiter(
 )
 
 
+_X402_PAID_POST_ROUTES = {
+    "/v1/infrastructure/assess": ("0.015", "Earth Physical Infrastructure Risk Hub"),
+    "/v1/terrain/analyze": ("0.005", "Geo-Terrain & Surface Physics Oracle"),
+    "/v1/weather/analyze": ("0.005", "Micro-Weather & Turbulence Oracle"),
+    "/v1/rf/coverage": ("0.005", "RF Line-of-Sight & SatCom Mesh Oracle"),
+}
+
+
 @app.middleware("http")
 async def observability_and_rate_limit_middleware(request: Request, call_next):
-    """Applies per-IP rate limiting on free /preview endpoints and emits structured JSON logs."""
+    """Applies x402 402-before-422 enforcement, per-IP rate limiting on /preview, and structured JSON logs."""
     t0 = time.perf_counter()
     forwarded_for = request.headers.get("x-forwarded-for", "")
     client_ip = (
@@ -97,6 +106,25 @@ async def observability_and_rate_limit_middleware(request: Request, call_next):
         if forwarded_for
         else (request.client.host if request.client else "unknown")
     )
+
+    if request.method == "POST" and request.url.path in _X402_PAID_POST_ROUTES:
+        auth_header = request.headers.get("x-402-signature") or request.headers.get("authorization")
+        if not auth_header:
+            price_usdc, oracle_name = _X402_PAID_POST_ROUTES[request.url.path]
+            preferred_net = (
+                request.headers.get("x-402-preferred-network")
+                or request.headers.get("x-402-network")
+            )
+            challenge = X402Verifier.generate_challenge(
+                price_usdc=price_usdc,
+                oracle_name=oracle_name,
+                preferred_network=preferred_net,
+            )
+            return JSONResponse(
+                status_code=402,
+                content=challenge.model_dump(),
+                headers={"X-402-Payment-Required": challenge.model_dump_json()},
+            )
 
     remaining = -1
     if request.method == "POST" and request.url.path == "/v1/infrastructure/preview":

@@ -242,3 +242,20 @@ async def test_mcp_glama_endpoints_and_manifest():
         )
         assert r_call.status_code == 200
         assert r_call.json()["result"]["isError"] is False
+
+        # GET /mcp discovery must return 200 (not 405) for MCP crawlers
+        r_get_mcp = await client.get("/mcp")
+        assert r_get_mcp.status_code == 200
+        assert r_get_mcp.json()["server"] == "geo-oracle-x402"
+        assert r_get_mcp.json()["tools_count"] >= 5
+
+        # Paid x402 POST routes must return 402 before 422 even on empty body (x402 audit bots)
+        for paid_path in (
+            "/v1/infrastructure/assess",
+            "/v1/terrain/analyze",
+            "/v1/weather/analyze",
+            "/v1/rf/coverage",
+        ):
+            r_audit = await client.post(paid_path, json={})
+            assert r_audit.status_code == 402, f"{paid_path} returned {r_audit.status_code}"
+            assert "X-402-Payment-Required" in r_audit.headers
